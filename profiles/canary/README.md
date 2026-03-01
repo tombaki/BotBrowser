@@ -1,6 +1,6 @@
 # BotBrowser Canary Profiles (v146)
 
-Please download BotBrowser **146.0.7680.3** from [this release](https://github.com/botswin/BotBrowser/releases/tag/146.0.7680.3).
+Please download BotBrowser **146.0.7680.31** from [this release](https://github.com/botswin/BotBrowser/releases/tag/146.0.7680.31).
 
 ---
 
