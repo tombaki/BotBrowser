@@ -5,7 +5,7 @@
 
 ## [2026-03-01]
 ### Major
-- **Chromium Core → 146.0.7680.31**: Updated the engine to Chrome 145 early release (146.0.7680.31) to stay ahead with the latest Chrome development. This maintains Web Platform parity, rendering consistency, and security patches with upstream.
+- **Chromium Core → 146.0.7680.31**: Updated the engine to Chrome 146 early release (146.0.7680.31) to stay ahead with the latest Chrome development. This maintains Web Platform parity, rendering consistency, and security patches with upstream.
 
 
 ## [2026-02-26]

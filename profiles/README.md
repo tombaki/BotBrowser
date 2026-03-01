@@ -56,12 +56,16 @@ All appear as different users on the same device type.
 
 ### Demo Profiles (Privacy Research Only)
 
+Run demo profiles via [CLI](../INSTALLATION.md#download--installation) or [Launcher](../launcher/). Automation framework integration (Puppeteer, Playwright) requires [premium profiles](#premium-profiles).
+
 **Limitations**
 - Limited-time privacy research use only
 - No headless mode support
-- No framework integration
+- No automation framework support (Puppeteer, Playwright)
 - No extension loading
 - **Not suitable for production research** (widely distributed and may be flagged)
+
+<a id="premium-profiles"></a>
 
 ### Premium Profiles (Academic Use)
 

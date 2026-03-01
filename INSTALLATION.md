@@ -2,6 +2,8 @@
 
 This guide provides step-by-step installation, troubleshooting, and deployment options across operating systems. Usage remains subject to the project [Legal Disclaimer](DISCLAIMER.md) and [Responsible Use Guidelines](RESPONSIBLE_USE.md).
 
+<a id="download--installation"></a>
+
 ## Download & Installation
 
 ### 1. Download Installer
