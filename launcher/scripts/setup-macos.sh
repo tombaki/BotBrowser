@@ -191,6 +191,20 @@ create_shortcuts() {
     fi
 }
 
+save_commit_hash() {
+    echo "Saving launcher version info..."
+    local commit_dir="$HOME/Library/Application Support/BotBrowser"
+    mkdir -p "$commit_dir"
+    local sha
+    sha=$(curl -fsSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/botswin/BotBrowser/commits?path=launcher&sha=main&per_page=1" 2>/dev/null | grep '"sha"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
+    if [ -n "$sha" ]; then
+        printf '%s' "$sha" > "$commit_dir/launcher-commit"
+        echo "  Version: ${sha:0:7}"
+    else
+        echo "  Warning: Could not save version info."
+    fi
+}
+
 launch_application() {
     echo "Starting BotBrowser Launcher..."
     cd "$DIST_DIR"
@@ -216,6 +230,7 @@ if [ -f "$EXE_PATH" ]; then
         install_nodejs
         install_repository
         build_application
+        save_commit_hash
         create_shortcuts
         launch_application
     else
@@ -226,6 +241,7 @@ else
     install_nodejs
     install_repository
     build_application
+    save_commit_hash
     create_shortcuts
     launch_application
 fi

@@ -6,10 +6,13 @@
 
 .sidenav {
     width: 200px;
-    display: flex;
-    flex-direction: column;
     background: #0f172a;
     color: white;
+
+    ::ng-deep .mat-drawer-inner-container {
+        display: flex;
+        flex-direction: column;
+    }
 
     .sidenav-header {
         padding: 16px;
@@ -59,6 +62,7 @@
     }
 
     .sidenav-footer {
+        margin-top: auto;
         padding: 12px;
 
         .download-progress {
@@ -123,6 +127,21 @@
                 height: 4px;
                 border-radius: 2px;
             }
+
+            &.update-ready {
+                .restart-button {
+                    width: 100%;
+                    margin-top: 4px;
+                    font-size: 12px;
+                }
+            }
+        }
+
+        .version-label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            text-align: center;
+            padding-top: 8px;
         }
     }
 }

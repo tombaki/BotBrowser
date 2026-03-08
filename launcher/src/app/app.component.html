@@ -17,6 +17,54 @@
         </mat-nav-list>
 
         <div class="sidenav-footer">
+            @switch (updateService.status()) {
+                @case ('checking') {
+                    <div class="download-progress">
+                        <div class="download-info">
+                            <mat-icon>sync</mat-icon>
+                            <span class="download-text">Checking for launcher update...</span>
+                        </div>
+                        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                    </div>
+                }
+                @case ('downloading') {
+                    <div class="download-progress">
+                        <div class="download-info">
+                            <mat-icon>download</mat-icon>
+                            <span class="download-text">Downloading launcher update...</span>
+                        </div>
+                        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                    </div>
+                }
+                @case ('building') {
+                    <div class="download-progress">
+                        <div class="download-info">
+                            <mat-icon>build</mat-icon>
+                            <span class="download-text">Building launcher update...</span>
+                        </div>
+                        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                    </div>
+                }
+                @case ('ready') {
+                    <div class="download-progress update-ready">
+                        <div class="download-info">
+                            <mat-icon>update</mat-icon>
+                            <span class="download-text">Update ready.</span>
+                        </div>
+                        <button mat-flat-button color="primary" class="restart-button" (click)="restartApp()">
+                            Restart Now
+                        </button>
+                    </div>
+                }
+                @case ('error') {
+                    <div class="download-progress">
+                        <div class="download-error" [matTooltip]="updateService.errorMessage()">
+                            <mat-icon>error</mat-icon>
+                            <span class="error-text">Launcher update failed</span>
+                        </div>
+                    </div>
+                }
+            }
             @if (kernelService.isAutoUpdating()) {
                 <div class="download-progress">
                     <div class="download-info">
@@ -63,6 +111,9 @@
                         }
                     }
                 </div>
+            }
+            @if (updateService.currentVersion()) {
+                <div class="version-label">v{{ updateService.currentVersion() }}</div>
             }
         </div>
     </mat-sidenav>

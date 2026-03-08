@@ -97,6 +97,22 @@ function New-Shortcuts {
     Write-Host "  Start Menu shortcut: $STARTMENU_SHORTCUT" -ForegroundColor Green
 }
 
+function Save-CommitHash {
+    Write-Host "Saving launcher version info..." -ForegroundColor Yellow
+    $commitDir = "$env:APPDATA\BotBrowser"
+    if (!(Test-Path $commitDir)) {
+        New-Item -ItemType Directory -Path $commitDir | Out-Null
+    }
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/botswin/BotBrowser/commits?path=launcher&sha=main&per_page=1" -Headers @{ Accept = "application/vnd.github.v3+json" } -UseBasicParsing
+        $response[0].sha | Out-File -FilePath "$commitDir\launcher-commit" -Encoding utf8 -NoNewline
+        Write-Host "  Version: $($response[0].sha.Substring(0, 7))" -ForegroundColor Green
+    } catch {
+        Write-Host "  Warning: Could not save version info." -ForegroundColor Yellow
+    }
+}
+
 function Start-Application {
     Write-Host "Starting BotBrowser Launcher..." -ForegroundColor Green
     Start-Process -FilePath $EXE_PATH -WorkingDirectory $DIST_DIR
@@ -121,6 +137,7 @@ if (Test-Path $EXE_PATH) {
         Install-NodeJS
         Install-Repository
         Build-Application
+        Save-CommitHash
         New-Shortcuts
         Start-Application
     } else {
@@ -131,6 +148,7 @@ if (Test-Path $EXE_PATH) {
     Install-NodeJS
     Install-Repository
     Build-Application
+    Save-CommitHash
     New-Shortcuts
     Start-Application
 }

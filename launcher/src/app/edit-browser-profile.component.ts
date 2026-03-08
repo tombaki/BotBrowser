@@ -44,7 +44,6 @@ import { AlertDialogComponent } from './shared/alert-dialog.component';
 import { BrowserLauncherService } from './shared/browser-launcher.service';
 import { BrowserProfileService } from './shared/browser-profile.service';
 import { ConfirmDialogComponent } from './shared/confirm-dialog.component';
-import type { ProxyCheckResult } from './shared/proxy-check.service';
 import { ProxyInputComponent } from './shared/proxy-input.component';
 import { ProxyParserService, type ParsedProxy } from './shared/proxy-parser.service';
 import { ProxyService } from './shared/proxy.service';
@@ -365,10 +364,6 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
     onProxyValueChange(value: ParsedProxy | null): void {
         this.proxyValue = value;
         this.selectedProxyId = '';
-    }
-
-    onIpCheckResult(result: ProxyCheckResult): void {
-        this.proxyConfigGroup.patchValue({ proxyIp: result.ip });
     }
 
     async onSaveProxyToList(proxy: ParsedProxy): Promise<void> {

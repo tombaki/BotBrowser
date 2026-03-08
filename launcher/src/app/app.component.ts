@@ -24,9 +24,11 @@ import { EditBrowserProfileComponent } from './edit-browser-profile.component';
 import { KernelManagementComponent } from './kernel-management/kernel-management.component';
 import { ProxyManagementComponent } from './proxy-management/proxy-management.component';
 import { QuickProxyChangeComponent } from './quick-proxy-change.component';
+import { AlertDialogComponent } from './shared/alert-dialog.component';
 import { BrowserLauncherService } from './shared/browser-launcher.service';
 import { BrowserProfileService } from './shared/browser-profile.service';
 import { ConfirmDialogComponent } from './shared/confirm-dialog.component';
+import { UpdateService } from './shared/update.service';
 import { KernelService } from './shared/kernel.service';
 import { StopPropagationDirective } from './shared/stop-propagation.directive';
 import { compressFolder, decompressZip, formatDateTime, formatProxyDisplay } from './utils';
@@ -63,6 +65,7 @@ export class AppComponent implements AfterViewInit {
     readonly #browserProfileService = inject(BrowserProfileService);
     readonly browserLauncherService = inject(BrowserLauncherService);
     readonly kernelService = inject(KernelService);
+    readonly updateService = inject(UpdateService);
 
     readonly AppName = AppName;
     readonly #dialog = inject(MatDialog);
@@ -113,6 +116,13 @@ export class AppComponent implements AfterViewInit {
     }
 
     editProfile(browserProfile: BrowserProfile): void {
+        const status = this.browserLauncherService.getRunningStatus(browserProfile);
+        if (status !== BrowserProfileStatus.Idle && status !== BrowserProfileStatus.LaunchFailed) {
+            this.#dialog.open(AlertDialogComponent, {
+                data: { message: 'Cannot edit a profile while it is running. Please stop the browser first.' },
+            });
+            return;
+        }
         this.#dialog
             .open(EditBrowserProfileComponent, {
                 width: '860px',
@@ -289,6 +299,12 @@ export class AppComponent implements AfterViewInit {
         await this.refreshProfiles();
         // Start kernel auto-update and auto-download tasks in the background
         this.kernelService.performStartupTasks().catch(console.error);
+        // Check for launcher updates: once now, then every hour
+        this.updateService.startPeriodicCheck();
+    }
+
+    restartApp(): void {
+        Neutralino.app.restartProcess();
     }
 
     get isAllSelected(): boolean {
