@@ -29,6 +29,10 @@
 
     tr.mat-mdc-row {
         height: 48px;
+
+        &.row-selected {
+            background-color: rgba(25, 118, 210, 0.08);
+        }
     }
 
     td.mat-mdc-cell {

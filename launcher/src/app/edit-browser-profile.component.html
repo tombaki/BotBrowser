@@ -89,8 +89,10 @@
                 [showQuickParse]="true"
                 [showCheckButton]="true"
                 [showSaveButton]="true"
+                [showClearButton]="true"
                 (valueChange)="onProxyValueChange($event)"
                 (saveToList)="onSaveProxyToList($event)"
+                (clearProxy)="onClearProxy()"
             />
 
             <div class="section-title">Advanced Proxy Config</div>
@@ -327,20 +329,20 @@
                 <div class="form-row margin-top">
                     <mat-form-field class="flex-1">
                         <mat-label>Noise Seed</mat-label>
-                        <input matInput type="number" step="0.01" placeholder="1.0 - 1.2" formControlName="botNoiseSeed" />
-                        <mat-hint>Float for deterministic RNG</mat-hint>
+                        <input matInput type="number" placeholder="0 = profile defaults" formControlName="botNoiseSeed" />
+                        <mat-hint>Integer seed for deterministic noise</mat-hint>
                     </mat-form-field>
 
                     <mat-form-field class="flex-1">
                         <mat-label>Time Scale</mat-label>
-                        <input
-                            matInput
-                            type="number"
-                            step="0.01"
-                            placeholder="0.80 - 0.99"
-                            formControlName="botTimeScale"
-                        />
+                        <input matInput type="number" step="0.01" placeholder="0.80 - 0.99" formControlName="botTimeScale" />
                         <mat-hint>Scale performance.now()</mat-hint>
+                    </mat-form-field>
+
+                    <mat-form-field class="flex-1">
+                        <mat-label>Time Seed</mat-label>
+                        <input matInput type="number" placeholder="0 = disabled" formControlName="botTimeSeed" />
+                        <mat-hint>Timing diversity (0 disables)</mat-hint>
                     </mat-form-field>
                 </div>
 
@@ -363,10 +365,22 @@
                     }
 
                     <mat-form-field class="flex-1">
-                        <mat-label>Time Seed</mat-label>
-                        <input matInput type="number" placeholder="0 = disabled" formControlName="botTimeSeed" />
-                        <mat-hint>Integer seed for timing diversity (0 disables)</mat-hint>
+                        <mat-label>Stack Seed</mat-label>
+                        <mat-select [(value)]="stackSeedMode" (selectionChange)="onStackSeedModeChange()">
+                            <mat-option value="">Default</mat-option>
+                            <mat-option value="profile">profile</mat-option>
+                            <mat-option value="real">real</mat-option>
+                            <mat-option value="number">Custom</mat-option>
+                        </mat-select>
+                        <mat-hint>JS stack depth fingerprint</mat-hint>
                     </mat-form-field>
+
+                    @if (stackSeedMode === 'number') {
+                        <mat-form-field class="flex-1">
+                            <mat-label>Stack Seed Value</mat-label>
+                            <input matInput type="number" placeholder="e.g. 12345" formControlName="botStackSeed" />
+                        </mat-form-field>
+                    }
                 </div>
             </form>
         </div>
@@ -479,6 +493,11 @@
                 <mat-slide-toggle formControlName="botPortProtection">
                     Port Protection
                     <span class="toggle-hint">Protect local ports from scanning (default: off)</span>
+                </mat-slide-toggle>
+
+                <mat-slide-toggle formControlName="botNetworkInfoOverride">
+                    Network Info Override
+                    <span class="toggle-hint">Use profile-defined navigator.connection values (default: off)</span>
                 </mat-slide-toggle>
             </form>
         </div>

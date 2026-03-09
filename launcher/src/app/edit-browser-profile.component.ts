@@ -154,6 +154,7 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
         botInjectRandomHistory: this.#injectedData?.launchOptions?.behavior?.botInjectRandomHistory,
         botDisableConsoleMessage: this.#injectedData?.launchOptions?.behavior?.botDisableConsoleMessage ?? true,
         botPortProtection: this.#injectedData?.launchOptions?.behavior?.botPortProtection,
+        botNetworkInfoOverride: this.#injectedData?.launchOptions?.behavior?.botNetworkInfoOverride,
     });
 
     // Identity & Locale - default: browserBrand=chrome
@@ -202,6 +203,7 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
         botTimeScale: this.#injectedData?.launchOptions?.noise?.botTimeScale,
         botFps: this.#injectedData?.launchOptions?.noise?.botFps,
         botTimeSeed: this.#injectedData?.launchOptions?.noise?.botTimeSeed,
+        botStackSeed: this.#injectedData?.launchOptions?.noise?.botStackSeed,
     });
 
     // FPS mode derived from botFps value
@@ -209,6 +211,14 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
         const fps = this.#injectedData?.launchOptions?.noise?.botFps;
         if (fps === 'profile' || fps === 'real') return fps;
         if (fps) return 'number' as const;
+        return '' as const;
+    })();
+
+    // Stack Seed mode derived from botStackSeed value
+    stackSeedMode: '' | 'profile' | 'real' | 'number' = (() => {
+        const seed = this.#injectedData?.launchOptions?.noise?.botStackSeed;
+        if (seed === 'profile' || seed === 'real') return seed;
+        if (seed) return 'number' as const;
         return '' as const;
     })();
 
@@ -345,6 +355,16 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
         }
     }
 
+    onStackSeedModeChange(): void {
+        if (this.stackSeedMode === 'profile' || this.stackSeedMode === 'real') {
+            this.noiseGroup.patchValue({ botStackSeed: this.stackSeedMode });
+        } else if (this.stackSeedMode === 'number') {
+            this.noiseGroup.patchValue({ botStackSeed: '' });
+        } else {
+            this.noiseGroup.patchValue({ botStackSeed: '' });
+        }
+    }
+
     onProxySelected(proxyId: string): void {
         if (!proxyId) {
             return;
@@ -364,6 +384,12 @@ export class EditBrowserProfileComponent implements OnInit, AfterViewInit, OnDes
     onProxyValueChange(value: ParsedProxy | null): void {
         this.proxyValue = value;
         this.selectedProxyId = '';
+    }
+
+    onClearProxy(): void {
+        this.proxyValue = null;
+        this.selectedProxyId = '';
+        this.proxyConfigGroup.patchValue({ proxyIp: '', botIpService: '' });
     }
 
     async onSaveProxyToList(proxy: ParsedProxy): Promise<void> {

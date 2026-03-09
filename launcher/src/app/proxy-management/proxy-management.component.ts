@@ -51,6 +51,7 @@ export class ProxyManagementComponent implements AfterViewInit {
     readonly selection = new SelectionModel<Proxy>(true, []);
     readonly checkResults = new Map<string, { status: 'checking' | 'ok' | 'fail'; result?: ProxyCheckResult; error?: string }>();
 
+    highlightedId: string | null = null;
     loading = false;
     checking = false;
 
@@ -89,10 +90,11 @@ export class ProxyManagementComponent implements AfterViewInit {
         this.loading = true;
         try {
             const proxies = await this.#proxyService.getAllProxies();
-            const selectedIds = this.selection.selected.map((p) => p.id);
+            // Preserve checkbox checked state across refresh
+            const checkedIds = this.selection.selected.map((p) => p.id);
             this.dataSource.data = proxies;
             this.selection.clear();
-            this.selection.select(...proxies.filter((p) => selectedIds.includes(p.id)));
+            this.selection.select(...proxies.filter((p) => checkedIds.includes(p.id)));
         } finally {
             this.loading = false;
         }
@@ -117,17 +119,24 @@ export class ProxyManagementComponent implements AfterViewInit {
     }
 
     editProxy(proxy: Proxy): void {
+        this.highlightedId = proxy.id;
         this.#dialog
             .open(EditProxyComponent, { data: proxy })
             .afterClosed()
-            .subscribe(() => {
+            .subscribe((result) => {
+                if (result) {
+                    this.highlightedId = proxy.id;
+                }
                 this.refreshProxies().catch(console.error);
             });
     }
 
     editSelectedProxy(): void {
-        if (this.selection.selected.length !== 1) return;
-        this.editProxy(this.selection.selected[0]!);
+        const proxy = this.highlightedId
+            ? this.dataSource.data.find((p) => p.id === this.highlightedId)
+            : null;
+        if (!proxy) return;
+        this.editProxy(proxy);
     }
 
     deleteProxy(proxy: Proxy): void {
@@ -194,8 +203,8 @@ export class ProxyManagementComponent implements AfterViewInit {
         this.checking = false;
     }
 
-    toggleSelectProxy(proxy: Proxy): void {
-        this.selection.toggle(proxy);
+    selectRow(proxy: Proxy): void {
+        this.highlightedId = proxy.id;
     }
 
     get isAllSelected(): boolean {

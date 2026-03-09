@@ -76,6 +76,7 @@ export interface BehaviorToggles {
     botInjectRandomHistory?: boolean;
     botDisableConsoleMessage?: boolean;
     botPortProtection?: boolean;
+    botNetworkInfoOverride?: boolean;
 }
 
 // Identity & Locale config
@@ -121,6 +122,7 @@ export interface NoiseConfig {
     botTimeScale?: number;
     botFps?: string;
     botTimeSeed?: number;
+    botStackSeed?: string;
 }
 
 // Rendering & Media config

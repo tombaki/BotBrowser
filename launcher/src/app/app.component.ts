@@ -77,6 +77,7 @@ export class AppComponent implements AfterViewInit {
     readonly dataSource = new MatTableDataSource<BrowserProfile>([]);
     readonly selection = new SelectionModel<BrowserProfile>(true, []);
 
+    highlightedId: string | null = null;
     loading = false;
 
     @ViewChild(MatSort) set sort(sort: MatSort) {
@@ -116,6 +117,7 @@ export class AppComponent implements AfterViewInit {
     }
 
     editProfile(browserProfile: BrowserProfile): void {
+        this.highlightedId = browserProfile.id;
         const status = this.browserLauncherService.getRunningStatus(browserProfile);
         if (status !== BrowserProfileStatus.Idle && status !== BrowserProfileStatus.LaunchFailed) {
             this.#dialog.open(AlertDialogComponent, {
@@ -132,11 +134,13 @@ export class AppComponent implements AfterViewInit {
             .afterClosed()
             .subscribe((result) => {
                 if (!result) return;
+                this.highlightedId = browserProfile.id;
                 this.refreshProfiles().catch(console.error);
             });
     }
 
     changeProxy(browserProfile: BrowserProfile): void {
+        this.highlightedId = browserProfile.id;
         this.#dialog
             .open(QuickProxyChangeComponent, {
                 width: '560px',
@@ -146,20 +150,21 @@ export class AppComponent implements AfterViewInit {
             .afterClosed()
             .subscribe((result) => {
                 if (!result) return;
+                this.highlightedId = browserProfile.id;
                 this.refreshProfiles().catch(console.error);
             });
     }
 
     editSelectedProfile(): void {
-        if (this.selection.selected.length !== 1) {
-            throw new Error('Please select one profile to edit');
-        }
-
-        this.editProfile(this.selection.selected[0]!);
+        const profile = this.highlightedId
+            ? this.dataSource.data.find((p) => p.id === this.highlightedId)
+            : null;
+        if (!profile) return;
+        this.editProfile(profile);
     }
 
-    toggleSelectProfile(browserProfile: BrowserProfile): void {
-        this.selection.toggle(browserProfile);
+    selectRow(browserProfile: BrowserProfile): void {
+        this.highlightedId = browserProfile.id;
     }
 
     cloneProfile(browserProfile: BrowserProfile): void {
@@ -285,11 +290,11 @@ export class AppComponent implements AfterViewInit {
         this.loading = true;
         try {
             const profiles = await this.#browserProfileService.getAllBrowserProfiles();
-            const selectedIds = this.selection.selected.map((profile) => profile.id);
+            // Preserve checkbox checked state across refresh
+            const checkedIds = this.selection.selected.map((profile) => profile.id);
             this.dataSource.data = profiles;
-
             this.selection.clear();
-            this.selection.select(...profiles.filter((profile) => selectedIds.includes(profile.id)));
+            this.selection.select(...profiles.filter((profile) => checkedIds.includes(profile.id)));
         } finally {
             this.loading = false;
         }

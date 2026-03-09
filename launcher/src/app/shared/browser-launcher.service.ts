@@ -278,6 +278,7 @@ export class BrowserLauncherService {
         if (opts?.behavior?.botInjectRandomHistory) args.push('--bot-inject-random-history');
         if (opts?.behavior?.botDisableConsoleMessage) args.push('--bot-disable-console-message');
         if (opts?.behavior?.botPortProtection) args.push('--bot-port-protection');
+        if (opts?.behavior?.botNetworkInfoOverride) args.push('--bot-network-info-override');
 
         // Identity & Locale
         if (opts?.identityLocale?.botConfigBrowserBrand)
@@ -335,6 +336,7 @@ export class BrowserLauncherService {
         if (opts?.noise?.botFps) args.push(`--bot-fps=${opts.noise.botFps}`);
         if (opts?.noise?.botTimeSeed != null && opts.noise.botTimeSeed !== 0)
             args.push(`--bot-time-seed=${opts.noise.botTimeSeed}`);
+        if (opts?.noise?.botStackSeed) args.push(`--bot-stack-seed=${opts.noise.botStackSeed}`);
 
         // Rendering & Media
         if (opts?.renderingMedia?.botConfigWebgl)

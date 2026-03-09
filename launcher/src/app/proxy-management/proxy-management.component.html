@@ -9,7 +9,7 @@
         Bulk Import
     </button>
 
-    <button mat-button (click)="editSelectedProxy()" [disabled]="selection.selected.length != 1">
+    <button mat-button (click)="editSelectedProxy()" [disabled]="!highlightedId">
         <mat-icon>edit</mat-icon>
         Edit
     </button>
@@ -120,7 +120,7 @@
             </ng-container>
 
             <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-            <tr mat-row *matRowDef="let element; columns: displayedColumns" (click)="toggleSelectProxy(element)"></tr>
+            <tr mat-row *matRowDef="let element; columns: displayedColumns" [class.row-selected]="highlightedId === element.id" (click)="selectRow(element)" (dblclick)="editProxy(element)"></tr>
         </table>
     }
 </div>

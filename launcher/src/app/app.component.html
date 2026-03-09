@@ -126,7 +126,7 @@
                         <mat-icon>add</mat-icon>
                         New Profile
                     </button>
-                    <button mat-button (click)="editSelectedProfile()" [disabled]="selection.selected.length != 1">
+                    <button mat-button (click)="editSelectedProfile()" [disabled]="!highlightedId">
                         <mat-icon>edit</mat-icon>
                         Edit
                     </button>
@@ -315,7 +315,9 @@
                             <tr
                                 mat-row
                                 *matRowDef="let element; columns: displayedColumns"
-                                (click)="toggleSelectProfile(element)"
+                                [class.row-selected]="highlightedId === element.id"
+                                (click)="selectRow(element)"
+                                (dblclick)="editProfile(element)"
                             ></tr>
                         </table>
                     }

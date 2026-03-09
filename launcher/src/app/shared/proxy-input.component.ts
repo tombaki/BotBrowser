@@ -54,16 +54,16 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
         }
 
         <form [formGroup]="formGroup">
-            <mat-form-field>
-                <mat-label>Type</mat-label>
-                <mat-select formControlName="type" (selectionChange)="onFormChange()">
-                    @for (type of proxyTypes; track type) {
-                        <mat-option [value]="type">{{ type }}</mat-option>
-                    }
-                </mat-select>
-            </mat-form-field>
-
             <div class="host-port-row">
+                <mat-form-field class="type-field">
+                    <mat-label>Type</mat-label>
+                    <mat-select formControlName="type" (selectionChange)="onFormChange()">
+                        @for (type of proxyTypes; track type) {
+                            <mat-option [value]="type">{{ type }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+
                 <mat-form-field class="host-field">
                     <mat-label>Host</mat-label>
                     <input matInput formControlName="host" placeholder="proxy.example.com" (input)="onFormChange()" />
@@ -88,7 +88,7 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
             </div>
         </form>
 
-        @if (showCheckButton || showSaveButton) {
+        @if (showCheckButton || showSaveButton || showClearButton) {
             <div class="check-ip-section">
                 <div class="button-row">
                     @if (showCheckButton) {
@@ -104,6 +104,11 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
                     @if (showSaveButton && getValue()) {
                         <button mat-stroked-button (click)="onSaveToList()">
                             Save to proxy list
+                        </button>
+                    }
+                    @if (showClearButton && getValue()) {
+                        <button mat-stroked-button color="warn" (click)="onClearProxy()">
+                            Clear proxy
                         </button>
                     }
                 </div>
@@ -195,6 +200,10 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
             .host-port-row {
                 display: flex;
                 gap: 16px;
+
+                .type-field {
+                    flex: 0 0 130px;
+                }
 
                 .host-field {
                     flex: 3;
@@ -296,6 +305,7 @@ export class ProxyInputComponent {
     @Input() showQuickParse = true;
     @Input() showCheckButton = false;
     @Input() showSaveButton = false;
+    @Input() showClearButton = false;
     @Input() set value(v: ParsedProxy | null) {
         if (v) {
             this.formGroup.patchValue(
@@ -319,6 +329,7 @@ export class ProxyInputComponent {
     @Output() valueChange = new EventEmitter<ParsedProxy | null>();
     @Output() ipCheckResult = new EventEmitter<ProxyCheckResult>();
     @Output() saveToList = new EventEmitter<ParsedProxy>();
+    @Output() clearProxy = new EventEmitter<void>();
     quickParseInput = '';
     parseError = '';
     parseSuccess = false;
@@ -406,6 +417,14 @@ export class ProxyInputComponent {
     onSaveToList(): void {
         const value = this.getValue();
         if (value) this.saveToList.emit(value);
+    }
+
+    onClearProxy(): void {
+        this.formGroup.reset({ type: 'http', host: '', port: 8080, username: '', password: '' });
+        this.checkResult = null;
+        this.checkError = '';
+        this.#emitValue();
+        this.clearProxy.emit();
     }
 
     getValue(): ParsedProxy | null {
