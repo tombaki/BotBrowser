@@ -112,6 +112,7 @@ export class AppComponent implements AfterViewInit {
             .afterClosed()
             .subscribe((result) => {
                 if (!result) return;
+                this.highlightedId = result;
                 this.refreshProfiles().catch(console.error);
             });
     }

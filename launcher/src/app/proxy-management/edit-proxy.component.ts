@@ -79,6 +79,6 @@ export class EditProxyComponent {
             await this.#proxyService.addProxy(proxy);
         }
 
-        this.#dialogRef.close();
+        this.#dialogRef.close(proxy.id);
     }
 }

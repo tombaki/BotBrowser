@@ -104,7 +104,9 @@ export class ProxyManagementComponent implements AfterViewInit {
         this.#dialog
             .open(EditProxyComponent)
             .afterClosed()
-            .subscribe(() => {
+            .subscribe((result) => {
+                if (!result) return;
+                this.highlightedId = result;
                 this.refreshProxies().catch(console.error);
             });
     }
