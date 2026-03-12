@@ -57,7 +57,7 @@ BotBrowser applies deterministic noise to font measurement APIs:
 # Enable ClientRects noise (default)
 --bot-config-noise-client-rects=true
 
-# Enable text rects noise (default)
+# Enable text rects noise (disabled by default)
 --bot-config-noise-text-rects=true
 ```
 

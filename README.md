@@ -166,7 +166,7 @@ Examples: [Playwright](examples/playwright/) • [Puppeteer](examples/puppeteer/
 | Console message suppression | [Behavior Toggles](CLI_FLAGS.md#behavior--protection-toggles) | [Guide](docs/guides/fingerprint/CONSOLE_SUPPRESSION.md) |
 | Headless / GUI parity | [Headless Compatibility](ADVANCED_FEATURES.md#headless-incognito-compatibility) | [Guide](docs/guides/fingerprint/INCOGNITO.md) |
 | Mirror: distributed privacy consistency | [Mirror Documentation](tools/mirror/) | [Guide](docs/guides/deployment/MIRROR_DISTRIBUTED.md) |
-| CanvasLab: Canvas 2D / WebGL / WebGL2 recorder | [--bot-canvas-record-file](CLI_FLAGS.md#--bot-canvas-record-file) | |
+| CanvasLab: Canvas 2D / WebGL / WebGL2 recorder | [--bot-canvas-record-file](CLI_FLAGS.md#--bot-canvas-record-file) | [Guide](docs/guides/getting-started/CANVASLAB.md) |
 
 ### Session & Behavior
 
@@ -175,9 +175,9 @@ Examples: [Playwright](examples/playwright/) • [Puppeteer](examples/puppeteer/
 | Cookie management (inline JSON or file) | [--bot-cookies](CLI_FLAGS.md#--bot-cookies) | [Guide](docs/guides/identity/COOKIE_MANAGEMENT.md) |
 | Bookmark injection | [--bot-bookmarks](CLI_FLAGS.md#--bot-bookmarks) | [Guide](docs/guides/identity/BOOKMARK_SEEDING.md) |
 | Random history injection | [Behavior Toggles](CLI_FLAGS.md#behavior--protection-toggles) | [Guide](docs/guides/identity/HISTORY_SEEDING.md) |
-| Always-active windows (anti-focus-tracking) | [Active Window](ADVANCED_FEATURES.md#active-window-emulation) | |
+| Always-active windows (anti-focus-tracking) | [Active Window](ADVANCED_FEATURES.md#active-window-emulation) | [Guide](docs/guides/fingerprint/ACTIVE_WINDOW.md) |
 | Custom HTTP headers (CLI + CDP) | [--bot-custom-headers](CLI_FLAGS.md#--bot-custom-headers-pro) | [Guide](docs/guides/network/CUSTOM_HTTP_HEADERS.md) |
-| Plaintext storage access (cookies, localStorage) | [Storage Access](examples/storage-access/) | |
+| Plaintext storage access (cookies, localStorage) | [Storage Access](examples/storage-access/) | [Guide](docs/guides/identity/STORAGE_ACCESS.md) |
 | Precision FPS simulation | [Behavior Toggles](CLI_FLAGS.md#behavior--protection-toggles) | [Guide](docs/guides/fingerprint/FPS_CONTROL.md) |
 | Timing scale (performance.now compression) | [Behavior Toggles](CLI_FLAGS.md#behavior--protection-toggles) | [Guide](docs/guides/fingerprint/PERFORMANCE.md) |
 | Window/screen dimension control | [Profile Overrides](CLI_FLAGS.md#profile-configuration-override-flags) | [Guide](docs/guides/platform/DEVICE_EMULATION.md) |

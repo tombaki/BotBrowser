@@ -18,6 +18,7 @@ These guides cover everything from initial setup to advanced deployment scenario
 | [Profile Management](getting-started/PROFILE_MANAGEMENT.md) | Manage profile files, versions, and lifecycle for reproducible browser identity. |
 | [First Verification](getting-started/FIRST_VERIFICATION.md) | Validate fingerprint consistency with CreepJS, Iphey, BrowserScan, and Pixelscan. |
 | [Automation Consistency Practices](getting-started/AUTOMATION_CONSISTENCY.md) | Reduce framework-related inconsistency signals in Playwright/Puppeteer workflows. |
+| [CanvasLab](getting-started/CANVASLAB.md) | Record Canvas 2D, WebGL, and WebGL2 API calls to study tracking techniques and verify fingerprint protection. |
 
 <a id="network-proxy"></a>
 ## Network and Proxy
@@ -59,6 +60,7 @@ These guides cover everything from initial setup to advanced deployment scenario
 | [Storage Quota Fingerprinting](fingerprint/STORAGE_QUOTA.md) | Control storage and memory quota surfaces used for device profiling. |
 | [Incognito Fingerprinting](fingerprint/INCOGNITO.md) | Keep fingerprint surfaces consistent between regular and private browsing sessions. |
 | [Console Suppression](fingerprint/CONSOLE_SUPPRESSION.md) | Suppress CDP-forwarded console artifacts that can affect runtime consistency checks. |
+| [Active Window Emulation](fingerprint/ACTIVE_WINDOW.md) | Prevent focus-based tracking by keeping windows in an always-active state. |
 
 <a id="identity-session"></a>
 ## Identity and Session
@@ -72,6 +74,7 @@ These guides cover everything from initial setup to advanced deployment scenario
 | [Cookie Management](identity/COOKIE_MANAGEMENT.md) | Inject, persist, and restore cookies for pre-authenticated session state. |
 | [Bookmark Seeding](identity/BOOKMARK_SEEDING.md) | Inject realistic bookmarks to strengthen cross-session browser state consistency. |
 | [History Seeding](identity/HISTORY_SEEDING.md) | Inject browsing history to reduce fresh-profile and empty-state signals. |
+| [Plaintext Storage Access](identity/STORAGE_ACCESS.md) | Read cookies, passwords, and LocalStorage directly from disk after a session. |
 
 <a id="platform-emulation"></a>
 ## Platform Emulation

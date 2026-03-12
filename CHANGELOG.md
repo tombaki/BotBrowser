@@ -3,6 +3,19 @@
 > **Research scope:** Entries in this changelog describe features evaluated in authorized labs and defensive benchmarking programs. Follow the [Legal Disclaimer](DISCLAIMER.md) and [Responsible Use Guidelines](RESPONSIBLE_USE.md). We work with security vendors to investigate any misuse, so report concerns to [support@botbrowser.io](mailto:support@botbrowser.io).
 
 
+## [2026-03-12]
+### Major
+- **Chromium Core → 146.0.7680.111**: Updated to Chrome 146 stable (146.0.7680.111). Web Platform consistency, rendering accuracy, and security patches stay aligned with upstream Chrome.
+
+### Improvements
+- **GeoIP Auto-Language Accuracy**: `navigator.languages` and `Accept-Language` auto-detection now returns the complete, correct language list for each country, with proper regional variants and consistent `Intl` locale behavior.
+
+- **Font Metrics Cross-Platform Accuracy**: Canvas text measurement values now match the target platform's native behavior across all host operating systems.
+
+### Fixes
+- **WebRTC Codec Capabilities Consistency**: `RTCRtpSender.getCapabilities()` and `RTCRtpReceiver.getCapabilities()` now return results consistent with the target profile.
+
+
 ## [2026-03-09]
 ### Major
 - **Chromium Core → 146.0.7680.66**: Updated to Chrome 146 stable (146.0.7680.66). Web Platform consistency, rendering accuracy, and security patches stay aligned with upstream Chrome.
