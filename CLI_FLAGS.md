@@ -395,11 +395,10 @@ BotBrowser auto-generates matching `navigator.userAgentData` (brands, fullVersio
 
 - `--bot-config-keyboard=profile`: Keyboard settings: profile (emulated), real (system keyboard)
 - `--bot-config-fonts=profile`: Font settings: profile (embedded), expand (profile + fallback), real (system fonts)
-- `--bot-config-orientation=<value>`: Screen orientation for mobile profiles (Android, iPhone, iPad). Desktop profiles ignore this flag.
+- `--bot-config-orientation=<value>`: Screen orientation for mobile profiles. Desktop profiles ignore this flag.
   - `profile` - Auto-detect from profile dimensions (default)
   - `landscape` / `portrait` - Force orientation, automatically adjusting all related dimensions to match
   - `landscape-primary`, `landscape-secondary`, `portrait-primary`, `portrait-secondary` - Explicit orientation with specific angle
-  - Covers `screen.orientation.type/angle`, `window.orientation`, CSS `@media (orientation)`, and all related dimension APIs
 - `--bot-config-color-scheme=light`: Color scheme: light, dark
 - `--bot-config-disable-device-scale-factor`: Disable device scale factor: true, false
 

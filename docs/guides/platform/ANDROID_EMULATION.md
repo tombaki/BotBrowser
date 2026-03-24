@@ -90,7 +90,7 @@ BotBrowser configures all platform-related surfaces to report Android identity: 
 
 - **Mobile viewport.** The viewport matches the Android device's screen dimensions from the profile.
 - **Device pixel ratio.** Reflects the profile's DPR (commonly 2.0 or 3.0 for mobile devices).
-- **Screen orientation.** Reports the profile-defined orientation.
+- **Screen orientation.** Reports the profile-defined orientation. Use `--bot-config-orientation=landscape|portrait` to control orientation at launch for both phone and tablet profiles.
 
 ### DevTools Interface
 
@@ -154,6 +154,19 @@ chromium-browser \
   --bot-config-bitness=64
 ```
 
+### Android tablet in landscape mode
+
+```javascript
+const browser = await chromium.launch({
+  executablePath: process.env.BOTBROWSER_EXEC_PATH,
+  headless: true,
+  args: [
+    "--bot-profile=/path/to/android-tablet-profile.enc",
+    "--bot-config-orientation=landscape",
+  ],
+});
+```
+
 ### Force touch events
 
 ```javascript
@@ -179,6 +192,7 @@ const browser = await chromium.launch({
 | Touch events not firing | Ensure the profile is an Android profile and `--bot-mobile-force-touch` is set if needed. |
 | Viewport too large for mobile | Do not set explicit viewport options in Playwright. Let the Android profile control dimensions. |
 | Android profile not loading | Verify your license supports PRO features. Android profiles require PRO or higher. |
+| Tablet orientation not changing | Use `--bot-config-orientation=landscape` or `portrait`. This works for both phone and tablet Android profiles. |
 
 ---
 

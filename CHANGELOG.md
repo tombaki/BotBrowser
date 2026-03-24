@@ -10,7 +10,7 @@
 ### New
 - **AudioLab (`--bot-audio-record-file`)**: New diagnostic tool that records all WebAudio API calls in real time, outputting structured JSONL logs to help understand how websites collect audio fingerprints.
 
-- **Screen Orientation Control (`--bot-config-orientation`)**: Control mobile profile screen orientation via `--bot-config-orientation=landscape|portrait|profile` without editing profile JSON. Covers `screen.orientation`, `window.orientation`, and CSS orientation media queries.
+- **Screen Orientation Control (`--bot-config-orientation`)**: Control mobile profile screen orientation at launch via `--bot-config-orientation=landscape|portrait|profile`. All orientation-related APIs and CSS media queries stay consistent with the selected mode.
 
 - **WebView UA Reduction for Android 16+**: WebView profiles on Android 16+ now automatically apply Google's UA reduction policy, matching real WebView behavior with frozen values in the UA string and full values in Client Hints.
 
