@@ -62,6 +62,9 @@ These guides cover everything from initial setup to advanced deployment scenario
 | [Incognito Fingerprinting](fingerprint/INCOGNITO.md) | Keep fingerprint surfaces consistent between regular and private browsing sessions. |
 | [Console Suppression](fingerprint/CONSOLE_SUPPRESSION.md) | Suppress CDP-forwarded console artifacts that can affect runtime consistency checks. |
 | [Active Window Emulation](fingerprint/ACTIVE_WINDOW.md) | Prevent focus-based tracking by keeping windows in an always-active state. |
+| [WebGPU Fingerprint Protection](fingerprint/WEBGPU.md) | Control WebGPU adapter information and rendering behavior across platforms. |
+| [Media Devices Privacy](fingerprint/MEDIA_DEVICES.md) | Control device enumeration to return consistent audio/video device lists. |
+| [CPU Core Scaling Protection](fingerprint/CPU_CORE_SCALING.md) | Constrain Worker parallelism to match the profile's claimed core count. |
 
 <a id="identity-session"></a>
 ## Identity and Session

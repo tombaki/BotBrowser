@@ -9,7 +9,7 @@
 ## Prerequisites
 
 - **BotBrowser binary** installed. See [INSTALLATION.md](../../../INSTALLATION.md).
-- **An Android profile file** (`.enc` or `.json`).
+- **An Android profile file** (`.enc` for production).
 - **ENT Tier3 license** for WebView brand support.
 - **PRO license** for `--bot-custom-headers` (if injecting app headers).
 
@@ -57,6 +57,10 @@ When you set `--bot-config-browser-brand=webview`:
 1. **Brand identity.** `navigator.userAgentData.brands` includes `"Android WebView"` instead of `"Google Chrome"`.
 2. **Client Hints.** All Client Hints headers reflect the WebView brand.
 3. **User-Agent placeholder.** The `{ua-full-version}` placeholder in `--user-agent` resolves to the Chromium version, which WebView shares with Chrome.
+
+### Android 16+ UA Reduction
+
+Starting with Android 16, Google applies [UA reduction](https://developer.chrome.com/docs/privacy-security/user-agent-reduction) to WebView. When the profile's `platform-version` is 16 or higher, BotBrowser automatically freezes the UA string placeholders to reduced values (`{platform-version}` becomes `10`, `{model}` becomes `K`, `{ua-full-version}` becomes a frozen major version). Client Hints continue to report the real values. The same `--user-agent` template works for both old and new Android versions without modification.
 
 ### Custom HTTP Headers for App Identity
 

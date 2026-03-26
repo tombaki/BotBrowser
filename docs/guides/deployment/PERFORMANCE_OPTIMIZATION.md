@@ -49,7 +49,7 @@ BotBrowser performance is influenced by several factors:
 
 2. **Profile loading.** Each profile contains fingerprint data (fonts, GPU info, screen properties) that controls the browser's protected identity. Loading happens once at startup. Keeping profiles on fast local storage (SSD) reduces startup time.
 
-3. **GPU rendering.** On servers without a physical GPU, BotBrowser uses SwiftShader (software rendering). This is slower than hardware GPU but provides consistent output. For tasks that do not require screenshots or visual rendering, this overhead is minimal.
+3. **GPU rendering.** On servers without a physical GPU, BotBrowser automatically selects the best available software rendering backend. If your system has GPU or GL drivers installed (e.g., Mesa on Linux), BotBrowser will use them for better performance. Otherwise it falls back to its built-in software renderer. You can control this with [`--bot-gpu-emulation`](../../../CLI_FLAGS.md#behavior--protection-toggles) (ENT Tier2).
 
 4. **Browser contexts.** Creating multiple BrowserContexts within a single browser process is more efficient than launching separate browser instances. Each context can have its own fingerprint via Per-Context Fingerprint (ENT Tier3).
 
@@ -159,6 +159,30 @@ Tips for reducing memory consumption:
 - **Limit concurrent pages.** Each tab consumes additional memory. Close pages you no longer need.
 - **Set container memory limits.** In Docker, use `--memory=2g` to prevent a single instance from consuming all host memory.
 
+### GPU rendering backend on Linux
+
+On headless Linux servers without a physical GPU, BotBrowser automatically detects and uses your system's GL drivers (e.g., Mesa GL drivers) when available. This typically delivers better performance than the built-in fallback renderer.
+
+```bash
+# Default: BotBrowser auto-detects the best backend (recommended)
+chromium-browser \
+    --headless \
+    --bot-profile="/path/to/profile.enc" \
+    --user-data-dir="$(mktemp -d)"
+
+# If you have your own GPU or GL driver and want BotBrowser
+# to skip all rendering backend configuration:
+chromium-browser \
+    --headless \
+    --bot-profile="/path/to/profile.enc" \
+    --bot-gpu-emulation=false \
+    --user-data-dir="$(mktemp -d)"
+```
+
+When `--bot-gpu-emulation=false` is set, BotBrowser does not configure any GPU rendering flags. Chrome's own GPU process handles backend selection. WebGL and Canvas fingerprint protection still work normally.
+
+> **Note:** If you disable GPU emulation and your system has no GL drivers, WebGL may become unavailable. Ensure your environment provides GPU or GL support (e.g., `apt install mesa-utils libegl-mesa0 mesa-vulkan-drivers` on Debian/Ubuntu).
+
 ### Optimized browser flags for production
 
 ```bash
@@ -190,7 +214,7 @@ chromium-browser \
 | CPU spikes during idle | Disable background features: `--disable-background-networking`, `--disable-sync`. |
 | Slow screenshot capture | Ensure a virtual display is running on Linux. Consider reducing profile screen resolution for faster rendering. |
 | Profile loading takes too long | Store profiles on SSD, not network-mounted storage. Profile files are small but read on every startup. |
-| GPU process consuming CPU | Expected on servers using SwiftShader. This is software rendering. For CPU-sensitive workloads, consider a GPU-equipped server. |
+| GPU process consuming CPU | Install Mesa GL drivers (`apt install libegl-mesa0 mesa-utils`) for better software rendering performance. If your server has a GPU, set `--bot-gpu-emulation=false` to use it directly. |
 
 ---
 

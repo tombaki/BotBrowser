@@ -4,13 +4,24 @@
 
 ---
 
+<a id="prerequisites"></a>
+
 ## Prerequisites
 
 - **BotBrowser** installed. See [Installation Guide](../../../INSTALLATION.md).
 - **A profile file** (`.enc` for production).
 
+---
 
 <a id="overview"></a>
+
+## Overview
+
+JavaScript recursive call stack depth is a privacy-relevant signal that varies by platform and cannot be controlled through JavaScript injection. BotBrowser protects this surface through the `--bot-stack-seed` flag (ENT Tier2).
+
+---
+
+<a id="quick-start"></a>
 
 ## Quick Start
 
@@ -21,21 +32,21 @@ chromium-browser \
 
 Start with this launch to establish a clean baseline before adding extra overrides.
 
-## Overview
-
-JavaScript recursive call stack depth is a privacy-relevant signal that varies by platform and cannot be controlled through JavaScript injection. BotBrowser protects this surface through the `--bot-stack-seed` flag (ENT Tier2).
-
 ---
 
-<a id="botbrowser-solution"></a>
+<a id="configuration"></a>
 
 ## How BotBrowser Controls Stack Depth
 
 The `--bot-stack-seed` flag provides three modes of stack depth control:
 
-### Profile Mode
+| Value | Behavior |
+|-------|----------|
+| `profile` | Use the exact stack depth values stored in the profile, matching the reference device. |
+| `real` | Use the native stack depth of the host system. Useful when running on the same platform as the profile target. |
+| `<integer>` (1-UINT32_MAX) | Per-session depth variation. Each seed produces a different but stable value. Same seed = same depth across sessions. |
 
-Use the exact stack depth values stored in the profile:
+### Profile Mode
 
 ```bash
 chromium-browser \
@@ -43,11 +54,7 @@ chromium-browser \
   --bot-stack-seed=profile
 ```
 
-This ensures stack depth matches the reference device the profile was captured from.
-
 ### Real Mode
-
-Use the native stack depth of the host system:
 
 ```bash
 chromium-browser \
@@ -55,19 +62,13 @@ chromium-browser \
   --bot-stack-seed=real
 ```
 
-Useful when running on the same platform as the profile target.
-
 ### Seed Mode
-
-Use an integer seed (1 to UINT32_MAX) for per-session depth variation:
 
 ```bash
 chromium-browser \
   --bot-profile="/path/to/profile.enc" \
   --bot-stack-seed=12345
 ```
-
-Each seed produces a different but stable stack depth value. The same seed always produces the same depth, providing reproducibility across sessions.
 
 ### Coverage Across Contexts
 
@@ -81,7 +82,7 @@ The controlled values maintain realistic ratios between contexts, matching what 
 
 ---
 
-<a id="example"></a>
+<a id="common-scenarios"></a>
 
 ## Common Scenarios
 
@@ -97,6 +98,10 @@ Use integer seed mode (`--bot-stack-seed=12345`) to keep runs reproducible per s
 
 Compare main-thread and Worker depth together when validating changes. A realistic ratio between contexts is often more important than one absolute number.
 
+---
+
+<a id="verification"></a>
+
 ## Effect Verification
 
 To verify protection is active:
@@ -107,20 +112,29 @@ To verify protection is active:
 
 ---
 
-<a id="related-docs"></a>
+<a id="troubleshooting"></a>
 
 ## Troubleshooting / FAQ
 
 | Problem | Solution |
-|---|---|
+|---------|----------|
 | Stack depth is lower than expected on all contexts | Confirm `--bot-stack-seed` mode is what you intended (`profile`, `real`, or integer seed). |
 | Main thread and Worker depths look inconsistent | Re-check that context setup and runtime flags are applied before page scripts execute. |
 | Depth varies across sessions unexpectedly | Avoid mixing seed mode and real mode between runs. Keep a fixed seed for reproducible validation. |
 
+---
+
+<a id="next-steps"></a>
+
 ## Next Steps
 
-- [CLI Flags Reference](../../../CLI_FLAGS.md). Complete list of all available flags, including `--bot-stack-seed`.
-- [Advanced Features](../../../ADVANCED_FEATURES.md). Stack depth control architecture.
+- [Performance Fingerprinting](PERFORMANCE.md). Control timing-based fingerprint signals.
+- [CPU Core Scaling Protection](CPU_CORE_SCALING.md). Constrain Worker parallelism to match claimed core count.
+- [CLI Flags Reference](../../../CLI_FLAGS.md#behavior--protection-toggles). Complete flag documentation including `--bot-stack-seed`.
+
+---
+
+**Related documentation:** [Advanced Features: Stack Depth Control](../../../ADVANCED_FEATURES.md#stack-depth-control) | [CLI Flags](../../../CLI_FLAGS.md)
 
 ---
 
