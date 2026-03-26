@@ -3,6 +3,21 @@
 > **Research scope:** Entries in this changelog describe features evaluated in authorized labs and defensive benchmarking programs. Follow the [Legal Disclaimer](DISCLAIMER.md) and [Responsible Use Guidelines](RESPONSIBLE_USE.md). We work with security vendors to investigate any misuse, so report concerns to [support@botbrowser.io](mailto:support@botbrowser.io).
 
 
+## [2026-03-26]
+### Major
+- **Chromium Core → 146.0.7680.165**: Updated to Chrome 146 stable (146.0.7680.165). Web Platform consistency, rendering accuracy, and security patches stay aligned with upstream Chrome.
+
+### New
+- **Incognito `X-Client-Data` Consistency (`--bot-enable-variations-in-context`)** (ENT Tier2): Incognito browser contexts now include `X-Client-Data` headers on Google domains when enabled, matching the behavior of normal browsing sessions.
+
+- **Custom History Depth (`--bot-inject-random-history={number}`)**: History injection now accepts a specific count (e.g., `--bot-inject-random-history=15`) for precise control over `history.length`, in addition to the existing random mode.
+
+### Improvements
+- **High-Concurrency Stability**: 100+ concurrent browser contexts now run without crashes or memory corruption.
+
+- **Emoji Rendering on Cross-Platform Profiles**: Emoji now renders in color when running macOS profiles on Linux hosts, producing correct Canvas toDataURL output.
+
+
 ## [2026-03-23]
 ### Major
 - **Chromium Core → 146.0.7680.154**: Updated to Chrome 146 stable (146.0.7680.154). Web Platform consistency, rendering accuracy, and security patches stay aligned with upstream Chrome.

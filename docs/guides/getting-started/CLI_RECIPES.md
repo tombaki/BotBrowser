@@ -314,10 +314,17 @@ chromium-browser \
 ### 20. Pre-populate bookmarks and browsing history
 
 ```bash
+# Random history (2-7 entries)
 chromium-browser \
   --bot-profile="/path/to/profile.enc" \
   --bot-bookmarks='[{"title":"Example","type":"url","url":"https://example.com"}]' \
   --bot-inject-random-history \
+  --user-data-dir="$(mktemp -d)"
+
+# Precise history count (15 entries, history.length = 16)
+chromium-browser \
+  --bot-profile="/path/to/profile.enc" \
+  --bot-inject-random-history=15 \
   --user-data-dir="$(mktemp -d)"
 ```
 

@@ -302,7 +302,8 @@ Most `--bot-*` flags from [CLI_FLAGS.md](CLI_FLAGS.md) work with per-context con
 | Network | [`--bot-network-info-override`](ADVANCED_FEATURES.md#network-info-privacy) for profile-defined `navigator.connection` values |
 | WebRTC | [`--bot-webrtc-ice`](ADVANCED_FEATURES.md#webrtc-leak-protection) for ICE endpoint control |
 | Window | [`--bot-always-active`](ADVANCED_FEATURES.md#active-window-emulation) to maintain active window state |
-| Session | `--bot-inject-random-history` for session authenticity |
+| Session | `--bot-inject-random-history` for session authenticity (supports precise count, e.g., `=15`) |
+| Google Headers | [`--bot-enable-variations-in-context`](CLI_FLAGS.md#behavior--protection-toggles) for `X-Client-Data` consistency in incognito contexts (ENT Tier2) |
 | Proxy | [`--proxy-server`](CLI_FLAGS.md#enhanced-proxy-configuration) (configure proxy per-context via `botbrowserFlags`), `--proxy-ip` to skip IP lookups |
 | HTTP | [`--bot-custom-headers`](CLI_FLAGS.md#--bot-custom-headers-pro) for custom HTTP request headers per context |
 | Config | [`--bot-config-platform`, `--bot-config-timezone`, `--bot-config-noise-canvas`, etc.](CLI_FLAGS.md#profile-configuration-override-flags) |

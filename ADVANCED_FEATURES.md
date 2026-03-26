@@ -142,6 +142,7 @@ Consistent behavior across execution modes.
 **Incognito-Mode Consistency:**
 - Fingerprint protection maintained in incognito mode
 - Consistent fingerprint between normal and incognito modes
+- `X-Client-Data` header consistency in incognito contexts via [`--bot-enable-variations-in-context`](CLI_FLAGS.md#behavior--protection-toggles) (ENT Tier2)
 
 <a id="webrtc-leak-protection"></a>
 ### WebRTC Leak Protection

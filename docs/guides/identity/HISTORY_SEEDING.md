@@ -22,6 +22,10 @@ A browser with no browsing history lacks the session state of a normally used br
 
 The `--bot-inject-random-history` flag tells BotBrowser to inject synthetic browsing history entries at startup. This populates `window.history.length` and related navigation state with realistic values, making the session consistent with a browser that has been in use over time.
 
+The flag supports two modes:
+- **Random mode** (`--bot-inject-random-history` or `=true`): Injects a random number of entries (2-7), producing a `history.length` of 3-8.
+- **Precise mode** (`--bot-inject-random-history=15`): Injects exactly the specified number of entries, producing a `history.length` of N+1 (e.g., 15 entries = `history.length` of 16).
+
 ---
 
 <a id="quick-start"></a>
@@ -29,9 +33,15 @@ The `--bot-inject-random-history` flag tells BotBrowser to inject synthetic brow
 ## Quick Start
 
 ```bash
+# Random mode (2-7 entries)
 chromium-browser \
   --bot-profile="/path/to/profile.enc" \
   --bot-inject-random-history
+
+# Precise mode (exactly 15 entries, history.length = 16)
+chromium-browser \
+  --bot-profile="/path/to/profile.enc" \
+  --bot-inject-random-history=15
 ```
 
 ```javascript
@@ -42,7 +52,7 @@ const browser = await chromium.launch({
   headless: true,
   args: [
     "--bot-profile=/path/to/profile.enc",
-    "--bot-inject-random-history",
+    "--bot-inject-random-history=15", // Or omit "=15" for random mode
   ],
 });
 
@@ -50,7 +60,7 @@ const page = await browser.newPage();
 await page.goto("https://example.com");
 
 const historyLength = await page.evaluate(() => window.history.length);
-console.log("History length:", historyLength); // Greater than 1
+console.log("History length:", historyLength); // 16 with =15, or 3-8 with random mode
 
 await browser.close();
 ```
@@ -63,18 +73,19 @@ await browser.close();
 
 1. **History generation.** When the flag is enabled, BotBrowser injects a set of synthetic navigation entries into the browser's session history before the first page load.
 
-2. **Realistic values.** The injected history produces a `window.history.length` value consistent with normal browsing patterns.
+2. **Realistic values.** The injected history produces a `window.history.length` value consistent with normal browsing patterns. In random mode, `history.length` ranges from 3 to 8. In precise mode, `history.length` equals the specified count plus one.
 
 3. **Session scope.** History injection applies to each new session. The injected entries do not persist beyond the session lifetime.
 
 ### Configuration via profile
 
-You can also enable history injection through the profile JSON instead of the CLI flag:
+You can also enable history injection through the profile configuration instead of the CLI flag:
 
-```json
+```jsonc
 {
   "configs": {
-    "injectRandomHistory": true
+    "injectRandomHistory": true    // Random mode (2-7 entries)
+    // "injectRandomHistory": 15   // Precise mode (15 entries)
   }
 }
 ```
@@ -142,6 +153,7 @@ await page.goto("https://example.com");
 |---------|----------|
 | `window.history.length` is still 1 | Ensure `--bot-inject-random-history` is in the `args` array, not as a separate option. |
 | History not injected with PRO license | Verify your license is active. Check the BotBrowser console output for license errors. |
+| Precise count not working | Use `=` syntax: `--bot-inject-random-history=15`. The value must be between 1 and 25. |
 
 ---
 

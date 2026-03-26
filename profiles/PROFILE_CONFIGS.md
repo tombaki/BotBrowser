@@ -92,7 +92,8 @@ All configurations are embedded in the `configs` field inside your profile JSON 
 | `location`                      | `auto` = IP-based (default); `real` = system GPS; custom coordinates (ENT Tier1). | `auto`    |
 | `browserBrand` (ENT Tier2, webview requires ENT Tier3)    | Override for `navigator.userAgentData.brands` and related UA fields. Supports chromium, chrome, edge, brave, opera, webview. | `chrome`    |
 | `brandFullVersion` (ENT Tier2)| Optional brand-specific full version string for UA-CH tuples (Edge/Opera cadences). | `""`    |
-| `injectRandomHistory` (PRO feature) | Optionally adds synthetic navigation history for fingerprint protection in browser state testing. | `false`    |
+| `injectRandomHistory` (PRO feature) | Adds synthetic navigation history for session authenticity. Accepts `true` (random 2-7 entries), a number for precise control (e.g., `15` for `history.length` of 16), or `false` to disable. | `false`    |
+| `enableVariationsInContext` (ENT Tier2) | Include `X-Client-Data` headers in incognito browser contexts for Google domains, same as regular browsing. | `false`    |
 | `disableDebugger`               | Prevents unintended interruptions from JavaScript debugger statements during fingerprint protection workflows. | `true`     |
 | `keyboard`                      | Choose keyboard fingerprint source: `profile` (emulated from profile) or `real` (use system keyboard). | `profile` |
 | `mediaTypes`                    | Media types behavior: `expand` (prefer local decoders), `profile` (profile-defined list), `real` (native system). | `expand` |
@@ -274,8 +275,12 @@ These fields work together with `--user-agent` CLI flag. BotBrowser auto-generat
     // brandFullVersion: optional brand-specific full version string for UA-CH tuples when the vendor’s cadence diverges
     "brandFullVersion": "142.0.3595.65",
 
-    // injectRandomHistory: Optionally adds synthetic navigation history for fingerprint protection in browser state testing
+    // injectRandomHistory: Adds synthetic navigation history for session authenticity
+    // Accepts true (random 2-7 entries), a number (e.g. 15), or false
     "injectRandomHistory": false,
+
+    // enableVariationsInContext (ENT Tier2): Include X-Client-Data headers in incognito contexts for Google domains
+    "enableVariationsInContext": false,
 
     // disableDebugger: Prevents unintended interruptions from JavaScript debugger statements during fingerprint protection workflows
     "disableDebugger": true,
