@@ -21,7 +21,7 @@
  *   node per_context_fingerprint.js
  */
 
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 
 (async () => {
   const execPath = process.env.BOTBROWSER_EXEC_PATH;

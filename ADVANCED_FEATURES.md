@@ -68,7 +68,7 @@ Switch proxy servers for a specific BrowserContext at runtime without restarting
 ```javascript
 const ctx = await browser.createBrowserContext();
 const page = await ctx.newPage();
-const client = await page.createCDPSession();
+const client = await browser.target().createCDPSession(); // must use browser-level session
 
 // Set initial proxy - US endpoint
 await client.send('BotBrowser.setBrowserContextProxy', {
@@ -463,24 +463,24 @@ Assign independent fingerprint bundles per BrowserContext without spawning new b
 <a id="cdp-quick-reference"></a>
 ## CDP Quick Reference
 
-All commands live under the `BotBrowser` CDP domain. Send them through a CDP session (`page.createCDPSession()` or `browser.target().createCDPSession()` depending on the command scope).
+All commands live under the `BotBrowser` CDP domain. Send them through a **browser-level** CDP session (`browser.target().createCDPSession()` in Puppeteer, `browser.newBrowserCDPSession()` in Playwright). Page-level sessions (`page.createCDPSession()`) do not have access to this domain.
 
 | Command | Scope | Tier | Description | Documentation |
 |---------|-------|------|-------------|---------------|
-| `SetBrowserContextFlags` | page | ENT Tier3 | Assign independent fingerprint flags to a BrowserContext | [Per-Context Fingerprint](PER_CONTEXT_FINGERPRINT.md) |
-| `SetBrowserContextProxy` | page | ENT Tier3 | Switch proxy for a BrowserContext at runtime | [Dynamic Proxy Switching](#dynamic-proxy-switching) |
-| `ClearBrowserContextProxy` | page | ENT Tier3 | Remove proxy override from a BrowserContext | [Dynamic Proxy Switching](#dynamic-proxy-switching) |
-| `SetCustomHeaders` | browser | PRO | Replace all custom HTTP request headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
-| `GetCustomHeaders` | browser | PRO | Retrieve current custom headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
-| `AddCustomHeader` | browser | PRO | Add or update a single custom header | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
-| `RemoveCustomHeader` | browser | PRO | Remove a single custom header | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
-| `ClearCustomHeaders` | browser | PRO | Remove all custom headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
-| `StartMirrorController` | browser | ENT Tier3 | Start this instance as a Mirror controller | [Mirror](tools/mirror/) |
-| `StartMirrorClient` | browser | ENT Tier3 | Connect this instance as a Mirror client | [Mirror](tools/mirror/) |
-| `StopMirror` | browser | ENT Tier3 | Stop Mirror controller or client role | [Mirror](tools/mirror/) |
-| `GetMirrorStatus` | browser | ENT Tier3 | Query current Mirror connection status | [Mirror](tools/mirror/) |
+| `setBrowserContextFlags` | browser | ENT Tier3 | Assign independent fingerprint flags to a BrowserContext | [Per-Context Fingerprint](PER_CONTEXT_FINGERPRINT.md) |
+| `setBrowserContextProxy` | browser | ENT Tier3 | Switch proxy for a BrowserContext at runtime | [Dynamic Proxy Switching](#dynamic-proxy-switching) |
+| `clearBrowserContextProxy` | browser | ENT Tier3 | Remove proxy override from a BrowserContext | [Dynamic Proxy Switching](#dynamic-proxy-switching) |
+| `setCustomHeaders` | browser | PRO | Replace all custom HTTP request headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
+| `getCustomHeaders` | browser | PRO | Retrieve current custom headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
+| `addCustomHeader` | browser | PRO | Add or update a single custom header | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
+| `removeCustomHeader` | browser | PRO | Remove a single custom header | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
+| `clearCustomHeaders` | browser | PRO | Remove all custom headers | [CLI Flags](CLI_FLAGS.md#--bot-custom-headers-pro) |
+| `startMirrorController` | browser | ENT Tier3 | Start this instance as a Mirror controller | [Mirror](tools/mirror/) |
+| `startMirrorClient` | browser | ENT Tier3 | Connect this instance as a Mirror client | [Mirror](tools/mirror/) |
+| `stopMirror` | browser | ENT Tier3 | Stop Mirror controller or client role | [Mirror](tools/mirror/) |
+| `getMirrorStatus` | browser | ENT Tier3 | Query current Mirror connection status | [Mirror](tools/mirror/) |
 
-> **Scope**: `browser` = send to browser-level CDP session; `page` = send to page-level CDP session.
+> All BotBrowser CDP commands are browser-level only. Use `browser.target().createCDPSession()` (Puppeteer) or `browser.newBrowserCDPSession()` (Playwright).
 
 ---
 

@@ -35,7 +35,7 @@ const browser = await puppeteer.launch({
 
 const ctx = await browser.createBrowserContext();
 const page = await ctx.newPage();
-const client = await page.createCDPSession();
+const client = await browser.target().createCDPSession(); // must use browser-level session
 
 // Switch to a UK proxy at runtime
 await client.send("BotBrowser.setBrowserContextProxy", {
@@ -95,7 +95,7 @@ await client.send("BotBrowser.clearBrowserContextProxy", {
 Switch between geographic regions within the same context, with automatic geo re-detection after each switch:
 
 ```javascript
-const client = await page.createCDPSession();
+const client = await browser.target().createCDPSession(); // must use browser-level session
 
 // Start with US proxy
 await client.send("BotBrowser.setBrowserContextProxy", {
@@ -155,7 +155,7 @@ await client.send("BotBrowser.setBrowserContextProxy", {
 
 | Problem | Solution |
 |---------|----------|
-| `setBrowserContextProxy` not found | Ensure you have an ENT Tier3 license. This is a tier-gated feature. |
+| `setBrowserContextProxy` not found | The `BotBrowser` CDP domain is only available on **browser-level** sessions. Use `browser.target().createCDPSession()` (Puppeteer) or `browser.newBrowserCDPSession()` (Playwright) instead of `page.createCDPSession()`. Also ensure you have an ENT Tier3 license. |
 | Geo signals not updating after switch | Geo re-detection happens on the next main-frame navigation. Navigate to a new page after switching. |
 | Slow proxy switch | Pass `proxyIp` to skip IP auto-detection on each switch. |
 | Old proxy still used for some requests | In-flight requests complete on the previous proxy. New requests use the updated proxy. |
