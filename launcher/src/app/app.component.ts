@@ -31,6 +31,7 @@ import { BrowserProfileService } from './shared/browser-profile.service';
 import { ConfirmDialogComponent } from './shared/confirm-dialog.component';
 import { UpdateService } from './shared/update.service';
 import { KernelService } from './shared/kernel.service';
+import { ShellService } from './shared/shell.service';
 import { StopPropagationDirective } from './shared/stop-propagation.directive';
 import { compressFolder, decompressZip, formatDateTime, formatProxyDisplay } from './utils';
 import { WarmupComponent } from './warmup.component';
@@ -65,6 +66,7 @@ export type NavItem = 'profiles' | 'proxies' | 'kernels';
 })
 export class AppComponent implements AfterViewInit {
     readonly #browserProfileService = inject(BrowserProfileService);
+    readonly #shell = inject(ShellService);
     readonly browserLauncherService = inject(BrowserLauncherService);
     readonly kernelService = inject(KernelService);
     readonly updateService = inject(UpdateService);
@@ -196,7 +198,7 @@ export class AppComponent implements AfterViewInit {
         });
 
         const browserProfilePath = await this.#browserProfileService.getBrowserProfilePath(browserProfile);
-        await compressFolder(browserProfilePath, entry);
+        await compressFolder(browserProfilePath, entry, this.#shell);
     }
 
     async warmupProfile(browserProfile: BrowserProfile): Promise<void> {
@@ -219,7 +221,7 @@ export class AppComponent implements AfterViewInit {
         if (!entry?.[0]) return;
 
         const browserProfilePath = await this.#browserProfileService.getBasePath();
-        await decompressZip(entry[0], browserProfilePath);
+        await decompressZip(entry[0], browserProfilePath, this.#shell);
         await this.refreshProfiles();
     }
 
@@ -419,16 +421,20 @@ export class AppComponent implements AfterViewInit {
                     .writeFile(filePath, csvContent)
                     .then(() => {
                         console.log(`CSV file saved successfully at ${filePath}`);
-                        Neutralino.os.showMessageBox('Success', 'CSV file has been successfully exported!');
+                        this.#snackBar.open('CSV file exported successfully', '', { duration: 3000 });
                     })
                     .catch((err) => {
                         console.error('Failed to save CSV file:', err);
-                        Neutralino.os.showMessageBox('Error', 'Failed to export CSV file. Please check the logs!');
+                        this.#dialog.open(AlertDialogComponent, {
+                            data: { message: 'Failed to export CSV file. Please check the logs.' },
+                        });
                     });
             })
             .catch((err) => {
                 console.error('Failed to show save dialog:', err);
-                Neutralino.os.showMessageBox('Error', 'Unable to display the save dialog. Please check the logs!');
+                this.#dialog.open(AlertDialogComponent, {
+                    data: { message: 'Unable to display the save dialog. Please check the logs.' },
+                });
             });
     }
 
@@ -450,10 +456,9 @@ export class AppComponent implements AfterViewInit {
 
             if (lines.length <= 1) {
                 console.warn('CSV file is empty or only contains headers.');
-                Neutralino.os.showMessageBox(
-                    'Warning',
-                    'The CSV file is empty or only contains headers. Please check the file content!'
-                );
+                this.#dialog.open(AlertDialogComponent, {
+                    data: { message: 'The CSV file is empty or only contains headers. Please check the file content.' },
+                });
                 return;
             }
 
@@ -506,10 +511,12 @@ export class AppComponent implements AfterViewInit {
                 resolvedProfiles.map((profile) => this.#browserProfileService.saveBrowserProfile(profile))
             );
             await this.refreshProfiles();
-            Neutralino.os.showMessageBox('Success', 'CSV file has been successfully imported!');
+            this.#snackBar.open('CSV file imported successfully', '', { duration: 3000 });
         } catch (error) {
             console.error('Failed to import profiles from CSV:', error);
-            Neutralino.os.showMessageBox('Error', 'Failed to import CSV file. Please check the logs!');
+            this.#dialog.open(AlertDialogComponent, {
+                data: { message: 'Failed to import CSV file. Please check the logs.' },
+            });
         }
     }
 

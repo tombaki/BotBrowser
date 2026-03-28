@@ -1,5 +1,6 @@
 import * as Neutralino from '@neutralinojs/lib';
 import { AppName } from './const';
+import type { ShellService } from './shared/shell.service';
 
 export function formatProxyDisplay(proxyUrl?: string): string {
     if (!proxyUrl) return '';
@@ -46,7 +47,7 @@ export async function getAppDataPath(subPath?: string): Promise<string> {
     return fullPath;
 }
 
-export async function compressFolder(folderPath: string, outputPath: string): Promise<void> {
+export async function compressFolder(folderPath: string, outputPath: string, shell: ShellService): Promise<void> {
     try {
         const osInfo = await Neutralino.computer.getOSInfo();
         const osType = osInfo.name;
@@ -68,14 +69,14 @@ export async function compressFolder(folderPath: string, outputPath: string): Pr
             throw new Error('Unsupported operating system');
         }
 
-        const response = await Neutralino.os.execCommand(command);
+        const response = await shell.run(command);
         console.log('Command output: ', response.stdOut);
     } catch (error) {
         console.error('Error during folder compression: ', error);
     }
 }
 
-export async function decompressZip(zipPath: string, outputFolder: string): Promise<void> {
+export async function decompressZip(zipPath: string, outputFolder: string, shell: ShellService): Promise<void> {
     try {
         // Get the OS information
         const osInfo = await Neutralino.computer.getOSInfo();
@@ -92,7 +93,7 @@ export async function decompressZip(zipPath: string, outputFolder: string): Prom
             throw new Error('Unsupported operating system');
         }
 
-        const response = await Neutralino.os.execCommand(command);
+        const response = await shell.run(command);
         console.log('Command output: ', response.stdOut);
     } catch (error) {
         console.error('Error during decompression: ', error);

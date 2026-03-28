@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import * as Neutralino from '@neutralinojs/lib';
+import { ShellService } from './shell.service';
 import { v4 as uuidv4 } from 'uuid';
 import { AppName } from '../const';
 import {
@@ -32,6 +33,8 @@ interface GitHubRelease {
 
 @Injectable({ providedIn: 'root' })
 export class KernelService {
+    readonly #shell = inject(ShellService);
+
     // Support multiple concurrent downloads - use tagName as key
     readonly downloadProgresses = signal<DownloadProgress[]>([]);
     readonly isAutoUpdating = signal(false);
@@ -74,14 +77,14 @@ export class KernelService {
             ];
             // Also check registry
             try {
-                const reg = await Neutralino.os.execCommand(
+                const reg = await this.#shell.run(
                     'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\7-Zip" /v Path 2>nul'
                 );
                 const match = reg.stdOut.match(/Path\s+REG_SZ\s+(.+)/);
                 if (match?.[1]) paths.unshift(`${match[1].trim()}\\7z.exe`);
             } catch { /* ignore */ }
             try {
-                const reg = await Neutralino.os.execCommand(
+                const reg = await this.#shell.run(
                     'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\7-Zip" /v Path 2>nul'
                 );
                 const match = reg.stdOut.match(/Path\s+REG_SZ\s+(.+)/);
@@ -90,7 +93,7 @@ export class KernelService {
 
             for (const p of paths) {
                 try {
-                    const r = await Neutralino.os.execCommand(`"${p}" i 2>nul`);
+                    const r = await this.#shell.run(`"${p}" i 2>nul`);
                     if (r.stdOut.includes('7-Zip')) {
                         this.#extractorAvailable = true;
                         return;
@@ -104,15 +107,15 @@ export class KernelService {
         } else {
             // Linux: need dpkg-deb or (ar + tar) for .deb extraction
             try {
-                const r = await Neutralino.os.execCommand('command -v dpkg-deb 2>/dev/null');
+                const r = await this.#shell.run('command -v dpkg-deb 2>/dev/null');
                 if (r.stdOut.trim()) {
                     this.#extractorAvailable = true;
                     return;
                 }
             } catch { /* not found */ }
             try {
-                const rAr = await Neutralino.os.execCommand('command -v ar 2>/dev/null');
-                const rTar = await Neutralino.os.execCommand('command -v tar 2>/dev/null');
+                const rAr = await this.#shell.run('command -v ar 2>/dev/null');
+                const rTar = await this.#shell.run('command -v tar 2>/dev/null');
                 if (rAr.stdOut.trim() && rTar.stdOut.trim()) {
                     this.#extractorAvailable = true;
                     return;
@@ -154,10 +157,10 @@ export class KernelService {
         try {
             const osInfo = await Neutralino.computer.getOSInfo();
             if (osInfo.name.includes('Windows')) {
-                const result = await Neutralino.os.execCommand('echo %PROCESSOR_ARCHITECTURE%');
+                const result = await this.#shell.run('echo %PROCESSOR_ARCHITECTURE%');
                 return result.stdOut.trim();
             } else {
-                const result = await Neutralino.os.execCommand('uname -m');
+                const result = await this.#shell.run('uname -m');
                 return result.stdOut.trim();
             }
         } catch {
@@ -595,9 +598,9 @@ export class KernelService {
         try {
             const osInfo = await Neutralino.computer.getOSInfo();
             if (osInfo.name.includes('Windows')) {
-                await Neutralino.os.execCommand(`del /f "${filePath}"`);
+                await this.#shell.exec(`del /f "${filePath}"`);
             } else {
-                await Neutralino.os.execCommand(`rm -f "${filePath}"`);
+                await this.#shell.exec(`rm -f "${filePath}"`);
             }
         } catch {
             // Ignore cleanup errors
@@ -608,9 +611,9 @@ export class KernelService {
         try {
             const osInfo = await Neutralino.computer.getOSInfo();
             if (osInfo.name.includes('Windows')) {
-                await Neutralino.os.execCommand(`rmdir /s /q "${dirPath}"`);
+                await this.#shell.exec(`rmdir /s /q "${dirPath}"`);
             } else {
-                await Neutralino.os.execCommand(`rm -rf "${dirPath}"`);
+                await this.#shell.exec(`rm -rf "${dirPath}"`);
             }
             // Verify directory is actually gone
             try {
@@ -656,7 +659,7 @@ export class KernelService {
             if (osInfo.name.includes('Windows')) {
                 // Use curl if available, fallback to PowerShell
                 try {
-                    const exitCode = await this.#runCommandAsync(`curl -L -o "${destPath}" "${url}"`);
+                    const exitCode = await this.#shell.exec(`curl -L -o "${destPath}" "${url}"`);
                     console.log('curl download completed with exit code:', exitCode);
                     if (exitCode !== 0) {
                         throw new Error(`curl failed with exit code ${exitCode}`);
@@ -664,14 +667,14 @@ export class KernelService {
                 } catch {
                     // Fallback to PowerShell
                     const psScript = `$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '${url}' -OutFile '${destPath}' -UseBasicParsing`;
-                    const exitCode = await this.#runCommandAsync(`powershell -Command "${psScript}"`);
+                    const exitCode = await this.#shell.exec(`powershell -Command "${psScript}"`);
                     if (exitCode !== 0) {
                         throw new Error(`PowerShell download failed with exit code ${exitCode}`);
                     }
                 }
             } else {
                 // Use curl for macOS/Linux
-                const exitCode = await this.#runCommandAsync(`curl -L -o "${destPath}" "${url}"`);
+                const exitCode = await this.#shell.exec(`curl -L -o "${destPath}" "${url}"`);
                 if (exitCode !== 0) {
                     throw new Error(`curl failed with exit code ${exitCode}`);
                 }
@@ -722,7 +725,7 @@ export class KernelService {
                 // Use /s for recursive search, /b for bare format
                 let nested7zFiles: string[] = [];
                 try {
-                    const result7z = await Neutralino.os.execCommand(`dir /s /b "${destDir}\\*.7z" 2>nul`);
+                    const result7z = await this.#shell.run(`dir /s /b "${destDir}\\*.7z" 2>nul`);
                     nested7zFiles = result7z.stdOut
                         .trim()
                         .split('\n')
@@ -739,7 +742,7 @@ export class KernelService {
                 // Check for nested .zip files inside (7z may contain a zip)
                 let zipFiles: string[] = [];
                 try {
-                    const result = await Neutralino.os.execCommand(`dir /s /b "${destDir}\\*.zip" 2>nul`);
+                    const result = await this.#shell.run(`dir /s /b "${destDir}\\*.zip" 2>nul`);
                     zipFiles = result.stdOut
                         .trim()
                         .split('\n')
@@ -749,13 +752,13 @@ export class KernelService {
 
                 for (const nestedZipFullPath of zipFiles) {
                     console.log(`Extracting nested zip: ${nestedZipFullPath}`);
-                    await Neutralino.os.execCommand(
+                    await this.#shell.exec(
                         `powershell -Command "Expand-Archive -Path '${nestedZipFullPath}' -DestinationPath '${destDir}' -Force"`
                     );
                     await this.#deleteFile(nestedZipFullPath);
                 }
             } else if (archivePath.endsWith('.zip')) {
-                await Neutralino.os.execCommand(
+                await this.#shell.run(
                     `powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force"`
                 );
             }
@@ -765,12 +768,12 @@ export class KernelService {
                 const mountPoint = `/Volumes/BotBrowser_${Date.now()}`;
                 try {
                     // Mount the dmg (use -quiet to reduce output, -noverify to skip verification for speed)
-                    await Neutralino.os.execCommand(
+                    await this.#shell.run(
                         `hdiutil attach "${archivePath}" -mountpoint "${mountPoint}" -nobrowse -noverify -quiet`
                     );
 
                     // Find and copy the .app
-                    const result = await Neutralino.os.execCommand(`ls "${mountPoint}"`);
+                    const result = await this.#shell.run(`ls "${mountPoint}"`);
                     const appName = result.stdOut.split('\n').find((f) => f.endsWith('.app'));
 
                     if (appName) {
@@ -778,10 +781,10 @@ export class KernelService {
                         const srcAppPath = `${mountPoint}/${appName}`;
 
                         // Copy the .app bundle (use -p to preserve permissions)
-                        await Neutralino.os.execCommand(`cp -Rp "${srcAppPath}" "${destDir}/"`);
+                        await this.#shell.run(`cp -Rp "${srcAppPath}" "${destDir}/"`);
 
                         // Remove quarantine attribute to prevent "Chromium is damaged" error
-                        await Neutralino.os.execCommand(`xattr -rd com.apple.quarantine "${destAppPath}"`);
+                        await this.#shell.run(`xattr -rd com.apple.quarantine "${destAppPath}"`);
 
                         // Ensure the main executable has execute permission
                         const chromiumExecPath = await Neutralino.filesystem.getJoinedPath(
@@ -791,7 +794,7 @@ export class KernelService {
                             'Chromium'
                         );
                         try {
-                            await Neutralino.os.execCommand(`chmod +x "${chromiumExecPath}"`);
+                            await this.#shell.run(`chmod +x "${chromiumExecPath}"`);
                         } catch {
                             // Try alternative executable names
                             const altNames = ['chrome', 'Google Chrome', 'BotBrowser'];
@@ -803,7 +806,7 @@ export class KernelService {
                                     altName
                                 );
                                 try {
-                                    await Neutralino.os.execCommand(`chmod +x "${altPath}"`);
+                                    await this.#shell.run(`chmod +x "${altPath}"`);
                                     break;
                                 } catch {
                                     continue;
@@ -818,7 +821,7 @@ export class KernelService {
                             'Frameworks'
                         );
                         try {
-                            await Neutralino.os.execCommand(
+                            await this.#shell.run(
                                 `find "${helpersPath}" -name "*.app" -exec chmod -R +x {} \\; 2>/dev/null`
                             );
                         } catch {
@@ -827,11 +830,11 @@ export class KernelService {
                     }
 
                     // Unmount
-                    await Neutralino.os.execCommand(`hdiutil detach "${mountPoint}" -quiet`);
+                    await this.#shell.run(`hdiutil detach "${mountPoint}" -quiet`);
                 } catch (error) {
                     // Try to unmount in case of error
                     try {
-                        await Neutralino.os.execCommand(`hdiutil detach "${mountPoint}" -force -quiet`);
+                        await this.#shell.run(`hdiutil detach "${mountPoint}" -force -quiet`);
                     } catch {
                         // Ignore
                     }
@@ -839,16 +842,16 @@ export class KernelService {
                 }
             } else if (archivePath.endsWith('.zip')) {
                 // macOS: handle zip files (some releases might be zip instead of dmg)
-                await Neutralino.os.execCommand(`unzip -o -q "${archivePath}" -d "${destDir}"`);
+                await this.#shell.run(`unzip -o -q "${archivePath}" -d "${destDir}"`);
 
                 // Find .app and fix permissions
-                const result = await Neutralino.os.execCommand(`find "${destDir}" -name "*.app" -type d | head -1`);
+                const result = await this.#shell.run(`find "${destDir}" -name "*.app" -type d | head -1`);
                 const appPath = result.stdOut.trim();
                 if (appPath) {
                     // Remove quarantine attribute
-                    await Neutralino.os.execCommand(`xattr -rd com.apple.quarantine "${appPath}"`);
+                    await this.#shell.run(`xattr -rd com.apple.quarantine "${appPath}"`);
                     // Set execute permissions on all executables inside
-                    await Neutralino.os.execCommand(`chmod -R +x "${appPath}/Contents/MacOS"`);
+                    await this.#shell.run(`chmod -R +x "${appPath}/Contents/MacOS"`);
                 }
             }
         } else {
@@ -876,9 +879,9 @@ export class KernelService {
         try {
             // Clean up any previous temp dir and create fresh directories
             console.log('Step 1: Creating directories...');
-            await Neutralino.os.execCommand(`rm -rf "${tempDir}"`);
-            await Neutralino.os.execCommand(`mkdir -p "${tempDir}"`);
-            await Neutralino.os.execCommand(`mkdir -p "${destDir}"`);
+            await this.#shell.run(`rm -rf "${tempDir}"`);
+            await this.#shell.run(`mkdir -p "${tempDir}"`);
+            await this.#shell.run(`mkdir -p "${destDir}"`);
             console.log('Step 1 done: Directories created');
 
             // Method 1: Try dpkg-deb first (most reliable on Debian/Ubuntu)
@@ -886,16 +889,16 @@ export class KernelService {
             try {
                 const dpkgCmd = `dpkg-deb -x "${archivePath}" "${destDir}" 2>&1`;
                 console.log('Running:', dpkgCmd);
-                const dpkgResult = await Neutralino.os.execCommand(dpkgCmd);
+                const dpkgResult = await this.#shell.run(dpkgCmd);
                 console.log('dpkg-deb stdout:', dpkgResult.stdOut);
                 console.log('dpkg-deb stderr:', dpkgResult.stdErr);
 
                 // Check if extraction produced files
-                const checkResult = await Neutralino.os.execCommand(`ls "${destDir}" 2>&1`);
+                const checkResult = await this.#shell.run(`ls "${destDir}" 2>&1`);
                 console.log('ls destDir result:', checkResult.stdOut);
                 if (checkResult.stdOut.includes('opt') || checkResult.stdOut.includes('usr')) {
                     console.log('dpkg-deb extraction successful!');
-                    await Neutralino.os.execCommand(`rm -rf "${tempDir}"`);
+                    await this.#shell.run(`rm -rf "${tempDir}"`);
                     console.log('=== EXTRACT DEB SUCCESS ===');
                     return;
                 }
@@ -908,15 +911,15 @@ export class KernelService {
             console.log('Trying manual ar + tar extraction...');
 
             // Extract ar archive to temp dir
-            const arResult = await Neutralino.os.execCommand(`cd "${tempDir}" && ar x "${archivePath}" 2>&1`);
+            const arResult = await this.#shell.run(`cd "${tempDir}" && ar x "${archivePath}" 2>&1`);
             console.log('ar extraction result:', arResult.stdOut, arResult.stdErr);
 
             // List temp dir contents
-            const listResult = await Neutralino.os.execCommand(`ls -la "${tempDir}" 2>&1`);
+            const listResult = await this.#shell.run(`ls -la "${tempDir}" 2>&1`);
             console.log('Temp dir contents:', listResult.stdOut);
 
             // Find data.tar file
-            const findDataResult = await Neutralino.os.execCommand(`ls "${tempDir}"/data.tar* 2>/dev/null | head -1`);
+            const findDataResult = await this.#shell.run(`ls "${tempDir}"/data.tar* 2>/dev/null | head -1`);
             const dataTar = findDataResult.stdOut.trim();
 
             if (!dataTar) {
@@ -939,14 +942,14 @@ export class KernelService {
                 tarCmd = `tar -xf "${dataTar}" -C "${destDir}"`;
             }
 
-            const tarResult = await Neutralino.os.execCommand(`${tarCmd} 2>&1`);
+            const tarResult = await this.#shell.run(`${tarCmd} 2>&1`);
             console.log('tar extraction result:', tarResult.stdOut, tarResult.stdErr);
 
             // Clean up temp dir
-            await Neutralino.os.execCommand(`rm -rf "${tempDir}"`);
+            await this.#shell.run(`rm -rf "${tempDir}"`);
 
             // Verify extraction
-            const verifyResult = await Neutralino.os.execCommand(`ls -la "${destDir}" 2>&1`);
+            const verifyResult = await this.#shell.run(`ls -la "${destDir}" 2>&1`);
             console.log('Extraction result:', verifyResult.stdOut);
 
             if (!verifyResult.stdOut.includes('opt') && !verifyResult.stdOut.includes('usr')) {
@@ -956,7 +959,7 @@ export class KernelService {
             console.log('Manual extraction successful');
         } catch (e) {
             // Clean up on error
-            await Neutralino.os.execCommand(`rm -rf "${tempDir}"`).catch(() => {});
+            await this.#shell.run(`rm -rf "${tempDir}"`).catch(() => {});
             const errorMsg = e instanceof Error ? e.message : String(e);
             console.error('Deb extraction failed:', errorMsg);
             throw new Error(`Failed to extract deb package: ${errorMsg}`);
@@ -969,7 +972,7 @@ export class KernelService {
 
         // First, try to find 7-Zip from Windows registry
         try {
-            const regResult = await Neutralino.os.execCommand(
+            const regResult = await this.#shell.run(
                 'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\7-Zip" /v Path 2>nul'
             );
             const match = regResult.stdOut.match(/Path\s+REG_SZ\s+(.+)/);
@@ -984,7 +987,7 @@ export class KernelService {
 
         // Also try 32-bit registry on 64-bit Windows
         try {
-            const regResult = await Neutralino.os.execCommand(
+            const regResult = await this.#shell.run(
                 'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\7-Zip" /v Path 2>nul'
             );
             const match = regResult.stdOut.match(/Path\s+REG_SZ\s+(.+)/);
@@ -1010,12 +1013,12 @@ export class KernelService {
             try {
                 console.log('Trying 7z command:', cmd);
                 // Use spawnProcess instead of execCommand to avoid blocking
-                const exitCode = await this.#runCommandAsync(cmd);
+                const exitCode = await this.#shell.exec(cmd);
                 console.log('7z extraction completed with exit code:', exitCode);
 
                 if (exitCode === 0) {
                     // Verify extraction succeeded by checking if directory has contents
-                    const checkResult = await Neutralino.os.execCommand(`dir /b "${destDir}" 2>nul`);
+                    const checkResult = await this.#shell.run(`dir /b "${destDir}" 2>nul`);
                     if (checkResult.stdOut.trim().length > 0) {
                         return; // Success
                     }
@@ -1030,34 +1033,6 @@ export class KernelService {
         }
 
         throw new Error(`7-Zip extraction failed: ${lastError}. Please install 7-Zip from https://7-zip.org/`);
-    }
-
-    // Run a command asynchronously using spawnProcess (non-blocking)
-    async #runCommandAsync(command: string): Promise<number> {
-        return new Promise((resolve, reject) => {
-            let processId: number | null = null;
-
-            const handler = (evt: CustomEvent) => {
-                if (evt.detail.id !== processId) return;
-
-                if (evt.detail.action === 'exit') {
-                    Neutralino.events.off('spawnedProcess', handler);
-                    resolve(Number(evt.detail.data));
-                }
-            };
-
-            Neutralino.events.on('spawnedProcess', handler);
-
-            Neutralino.os
-                .spawnProcess(command)
-                .then((proc) => {
-                    processId = proc.id;
-                })
-                .catch((err) => {
-                    Neutralino.events.off('spawnedProcess', handler);
-                    reject(err);
-                });
-        });
     }
 
     async #findExecutable(installDir: string): Promise<string> {
@@ -1079,7 +1054,7 @@ export class KernelService {
             // Search recursively for any of the possible executables
             for (const exe of possiblePaths) {
                 try {
-                    const result = await Neutralino.os.execCommand(`dir /s /b "${installDir}\\${exe}" 2>nul`);
+                    const result = await this.#shell.run(`dir /s /b "${installDir}\\${exe}" 2>nul`);
                     const lines = result.stdOut.trim().split('\n').map((l) => l.replace(/\r/g, '').trim()).filter(Boolean);
                     for (const candidate of lines) {
                         try {
@@ -1097,7 +1072,7 @@ export class KernelService {
             // List directory contents for debugging
             let dirContents = '';
             try {
-                const listResult = await Neutralino.os.execCommand(`dir /s /b "${installDir}" 2>nul`);
+                const listResult = await this.#shell.run(`dir /s /b "${installDir}" 2>nul`);
                 dirContents = listResult.stdOut.substring(0, 500);
             } catch {
                 dirContents = 'Could not list directory';
@@ -1106,7 +1081,7 @@ export class KernelService {
             throw new Error(`Could not find executable in ${installDir}. Contents: ${dirContents}`);
         } else if (osInfo.name.includes('Darwin')) {
             // Look for .app bundle
-            const result = await Neutralino.os.execCommand(
+            const result = await this.#shell.run(
                 `find "${installDir}" -maxdepth 2 -name "*.app" -type d | head -1`
             );
             const appPath = result.stdOut.trim();
@@ -1118,7 +1093,7 @@ export class KernelService {
                     try {
                         await Neutralino.filesystem.getStats(execPath);
                         // Ensure it has execute permission
-                        await Neutralino.os.execCommand(`chmod +x "${execPath}"`);
+                        await this.#shell.run(`chmod +x "${execPath}"`);
                         return appPath; // Return .app path, launcher will handle Contents/MacOS/...
                     } catch {
                         continue;
@@ -1126,13 +1101,13 @@ export class KernelService {
                 }
 
                 // If no known executable found, check what's in Contents/MacOS
-                const macosResult = await Neutralino.os.execCommand(
+                const macosResult = await this.#shell.run(
                     `ls "${appPath}/Contents/MacOS" 2>/dev/null | head -1`
                 );
                 const mainExec = macosResult.stdOut.trim();
                 if (mainExec) {
                     const execPath = await Neutralino.filesystem.getJoinedPath(appPath, 'Contents', 'MacOS', mainExec);
-                    await Neutralino.os.execCommand(`chmod +x "${execPath}"`);
+                    await this.#shell.run(`chmod +x "${execPath}"`);
                     return appPath;
                 }
 
@@ -1145,18 +1120,18 @@ export class KernelService {
             const searchNames = ['chrome', 'chromium-browser', 'chromium'];
             for (const name of searchNames) {
                 // First find by name (without -executable since permissions may not be set)
-                const result = await Neutralino.os.execCommand(
+                const result = await this.#shell.run(
                     `find "${installDir}" -type f -name "${name}" 2>/dev/null | head -1`
                 );
                 const exePath = result.stdOut.trim();
                 if (exePath) {
                     // Set execute permission
-                    await Neutralino.os.execCommand(`chmod +x "${exePath}"`);
+                    await this.#shell.run(`chmod +x "${exePath}"`);
                     return exePath;
                 }
             }
             // List directory contents for debugging
-            const dirContents = await Neutralino.os.execCommand(`find "${installDir}" -type f 2>/dev/null | head -20`);
+            const dirContents = await this.#shell.run(`find "${installDir}" -type f 2>/dev/null | head -20`);
             throw new Error(`Could not find executable in installed kernel. Found files: ${dirContents.stdOut.trim()}`);
         }
     }

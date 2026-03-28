@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
-import * as Neutralino from '@neutralinojs/lib';
+import { inject, Injectable } from '@angular/core';
 import type { ParsedProxy } from './proxy-parser.service';
+import { ShellService } from './shell.service';
 
 export interface ProxyCheckResult {
     ip: string;
@@ -14,6 +14,8 @@ export interface ProxyCheckResult {
 
 @Injectable({ providedIn: 'root' })
 export class ProxyCheckService {
+    readonly #shell = inject(ShellService);
+
     async checkProxy(proxy: ParsedProxy): Promise<ProxyCheckResult> {
         const proxyUrl = this.#buildProxyArg(proxy);
         const apiUrl = 'http://ip-api.com/json?fields=query,country,regionName,city,isp,org,hosting';
@@ -25,9 +27,9 @@ export class ProxyCheckService {
             curlCmd = `curl -x "${proxyUrl}" "${apiUrl}" --connect-timeout 10 -s`;
         }
 
-        let result: { pid: number; stdOut: string; stdErr: string };
+        let result: { exitCode: number; stdOut: string; stdErr: string };
         try {
-            result = await Neutralino.os.execCommand(curlCmd, { background: false });
+            result = await this.#shell.run(curlCmd);
         } catch (error) {
             throw new Error(`Failed to execute curl: ${error instanceof Error ? error.message : error}`);
         }

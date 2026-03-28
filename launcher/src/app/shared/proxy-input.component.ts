@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ProxyTypes } from '../data/proxy';
 import type { ProxyType } from '../data/proxy';
@@ -28,6 +29,7 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
         MatIconModule,
         MatProgressSpinnerModule,
         MatTooltipModule,
+        MatSnackBarModule,
     ],
     template: `
         @if (showQuickParse) {
@@ -111,6 +113,11 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
                             Clear proxy
                         </button>
                     }
+                    @if (getValue()) {
+                        <button mat-stroked-button (click)="onCopyProxyUrl()">
+                            Copy URL
+                        </button>
+                    }
                 </div>
 
                 @if (checkError) {
@@ -126,7 +133,7 @@ import { ProxyParserService, type ParsedProxy } from './proxy-parser.service';
                                 mat-icon-button
                                 class="copy-btn"
                                 (click)="copyToClipboard(checkResult.ip)"
-                                [matTooltip]="copyTooltip"
+                                matTooltip="Copy IP"
                             >
                                 <mat-icon>content_copy</mat-icon>
                             </button>
@@ -298,6 +305,7 @@ export class ProxyInputComponent {
     readonly #proxyParser = inject(ProxyParserService);
     readonly #proxyCheck = inject(ProxyCheckService);
     readonly #formBuilder = inject(FormBuilder);
+    readonly #snackBar = inject(MatSnackBar);
     readonly #ngZone = inject(NgZone);
 
     readonly proxyTypes = ProxyTypes;
@@ -337,7 +345,7 @@ export class ProxyInputComponent {
     checking = false;
     checkResult: ProxyCheckResult | null = null;
     checkError = '';
-    copyTooltip = 'Copy IP';
+
 
     readonly formGroup = this.#formBuilder.group({
         type: 'http' as ProxyType,
@@ -401,14 +409,7 @@ export class ProxyInputComponent {
     async copyToClipboard(text: string): Promise<void> {
         try {
             await Neutralino.clipboard.writeText(text);
-            this.#ngZone.run(() => {
-                this.copyTooltip = 'Copied!';
-                setTimeout(() => {
-                    this.#ngZone.run(() => {
-                        this.copyTooltip = 'Copy IP';
-                    });
-                }, 1500);
-            });
+            this.#snackBar.open('Copied to clipboard', '', { duration: 2000 });
         } catch {
             // fallback ignored
         }
@@ -417,6 +418,21 @@ export class ProxyInputComponent {
     onSaveToList(): void {
         const value = this.getValue();
         if (value) this.saveToList.emit(value);
+    }
+
+    async onCopyProxyUrl(): Promise<void> {
+        const value = this.getValue();
+        if (!value) return;
+        const scheme = value.type ? `${value.type}://` : '';
+        let url = scheme;
+        if (value.username) {
+            url += `${value.username}`;
+            if (value.password) url += `:${value.password}`;
+            url += '@';
+        }
+        url += `${value.host}:${value.port}`;
+        await Neutralino.clipboard.writeText(url);
+        this.#snackBar.open('Copied to clipboard', '', { duration: 2000 });
     }
 
     onClearProxy(): void {

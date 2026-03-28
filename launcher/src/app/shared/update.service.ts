@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import * as Neutralino from '@neutralinojs/lib';
+import { ShellService } from './shell.service';
 import { AppName } from '../const';
 
 const GITHUB_API_URL = 'https://api.github.com/repos/botswin/BotBrowser/commits?path=launcher&sha=main&per_page=1';
@@ -10,6 +11,7 @@ export type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'building' | 'r
 
 @Injectable({ providedIn: 'root' })
 export class UpdateService {
+    readonly #shell = inject(ShellService);
     readonly status = signal<UpdateStatus>('idle');
     readonly errorMessage = signal('');
     readonly currentVersion = signal('');
@@ -86,13 +88,13 @@ export class UpdateService {
         this.#isWindows = osInfo.name.includes('Windows');
 
         if (this.#isWindows) {
-            const result = await Neutralino.os.execCommand('echo %LOCALAPPDATA%');
+            const result = await this.#shell.run('echo %LOCALAPPDATA%');
             const localAppData = result.stdOut.trim();
             this.#installDir = `${localAppData}\\${AppName}`;
             this.#nodeDir = `${this.#installDir}\\node`;
             this.#repoDir = `${this.#installDir}\\${AppName}`;
         } else {
-            const result = await Neutralino.os.execCommand('echo $HOME');
+            const result = await this.#shell.run('echo $HOME');
             const home = result.stdOut.trim();
             this.#installDir = `${home}/.botbrowser`;
             this.#nodeDir = `${this.#installDir}/node`;
@@ -146,26 +148,26 @@ export class UpdateService {
         const zipPath = this.#isWindows ? `${this.#installDir}\\botbrowser-update.zip` : `${this.#installDir}/botbrowser-update.zip`;
 
         if (this.#isWindows) {
-            await Neutralino.os.execCommand(
+            await this.#shell.exec(
                 `powershell -Command "$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '${REPO_ZIP_URL}' -OutFile '${zipPath}' -UseBasicParsing"`
             );
         } else {
-            await Neutralino.os.execCommand(`curl -fsSL "${REPO_ZIP_URL}" -o "${zipPath}"`);
+            await this.#shell.exec(`curl -fsSL "${REPO_ZIP_URL}" -o "${zipPath}"`);
         }
 
         // Step 2: Remove old repo, extract new
         if (this.#isWindows) {
-            await Neutralino.os.execCommand(`rmdir /s /q "${this.#repoDir}"`).catch(() => {});
-            await Neutralino.os.execCommand(
+            await this.#shell.exec(`rmdir /s /q "${this.#repoDir}"`).catch(() => {});
+            await this.#shell.exec(
                 `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${this.#installDir}' -Force"`
             );
-            await Neutralino.os.execCommand(`rename "${this.#installDir}\\BotBrowser-main" "${AppName}"`);
-            await Neutralino.os.execCommand(`del /f "${zipPath}"`);
+            await this.#shell.exec(`rename "${this.#installDir}\\BotBrowser-main" "${AppName}"`);
+            await this.#shell.exec(`del /f "${zipPath}"`);
         } else {
-            await Neutralino.os.execCommand(`rm -rf "${this.#repoDir}"`).catch(() => {});
-            await Neutralino.os.execCommand(`unzip -q -o "${zipPath}" -d "${this.#installDir}"`);
-            await Neutralino.os.execCommand(`mv "${this.#installDir}/BotBrowser-main" "${this.#repoDir}"`);
-            await Neutralino.os.execCommand(`rm -f "${zipPath}"`);
+            await this.#shell.exec(`rm -rf "${this.#repoDir}"`).catch(() => {});
+            await this.#shell.exec(`unzip -q -o "${zipPath}" -d "${this.#installDir}"`);
+            await this.#shell.exec(`mv "${this.#installDir}/BotBrowser-main" "${this.#repoDir}"`);
+            await this.#shell.exec(`rm -f "${zipPath}"`);
         }
 
         // Step 3: npm ci + npm run build
@@ -176,7 +178,7 @@ export class UpdateService {
             ? `set "PATH=${this.#nodeDir};%PATH%" &&`
             : `export PATH="${this.#nodeDir}/bin:$PATH" &&`;
 
-        await Neutralino.os.execCommand(`${pathEnv} cd "${launcherDir}" && ${npmCmd} ci && ${npmCmd} run build`);
+        await this.#shell.exec(`${pathEnv} cd "${launcherDir}" && ${npmCmd} ci && ${npmCmd} run build`);
 
         // Step 4: Save commit hash
         await this.#writeLocalCommit(remoteCommit);

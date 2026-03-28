@@ -8,6 +8,7 @@ import { extractMajorVersion } from '../data/bot-profile';
 import { BrowserProfileStatus, getBrowserProfileStatusText, type BrowserProfile } from '../data/browser-profile';
 import { SimpleCDP } from '../simple-cdp';
 import { createDirectoryIfNotExists, sleep } from '../utils';
+import { ShellService } from './shell.service';
 import { AlertDialogComponent } from './alert-dialog.component';
 import { BrowserProfileService } from './browser-profile.service';
 import { KernelService } from './kernel.service';
@@ -25,6 +26,7 @@ export interface RunningInfo {
 export class BrowserLauncherService {
     readonly #browserProfileService = inject(BrowserProfileService);
     readonly #kernelService = inject(KernelService);
+    readonly #shell = inject(ShellService);
     readonly #runningStatuses = new Map<string, RunningInfo>();
     readonly #dialog = inject(MatDialog);
 
@@ -456,7 +458,7 @@ export class BrowserLauncherService {
 
         // If no known name found, try to find the first executable in Contents/MacOS
         try {
-            const result = await Neutralino.os.execCommand(`ls "${appPath}/Contents/MacOS" 2>/dev/null | head -1`);
+            const result = await this.#shell.run(`ls "${appPath}/Contents/MacOS" 2>/dev/null | head -1`);
             const mainExec = result.stdOut.trim();
             if (mainExec) {
                 return await Neutralino.filesystem.getJoinedPath(appPath, 'Contents', 'MacOS', mainExec);
