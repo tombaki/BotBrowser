@@ -116,6 +116,21 @@ if ($sevenZip) {
     exit 1
 }
 
+# Handle nested archives (the outer 7z may contain chrome.7z or other archives)
+$nested7zFiles = Get-ChildItem -Path $InstallDir -Filter "*.7z" -Recurse -ErrorAction SilentlyContinue
+foreach ($nested in $nested7zFiles) {
+    Write-Host "   Extracting nested archive: $($nested.Name)"
+    & $sevenZip.Source x $nested.FullName -o"$InstallDir" -y | Out-Null
+    Remove-Item $nested.FullName -Force
+}
+
+$nestedZipFiles = Get-ChildItem -Path $InstallDir -Filter "*.zip" -Recurse -ErrorAction SilentlyContinue
+foreach ($nested in $nestedZipFiles) {
+    Write-Host "   Extracting nested archive: $($nested.Name)"
+    Expand-Archive -Path $nested.FullName -DestinationPath $InstallDir -Force
+    Remove-Item $nested.FullName -Force
+}
+
 Write-Host "4. Cleaning up..."
 Remove-Item $tempFile -Force
 
