@@ -18,6 +18,7 @@
  *   BOTBROWSER_EXEC_PATH=/path/to/chrome \
  *   PROFILE_A=/path/to/profile-a.enc \
  *   PROFILE_B=/path/to/profile-b.enc \
+ *   PROXY_B=socks5://user:pass@host:1080 \
  *   node per_context_fingerprint.js
  */
 
@@ -27,12 +28,14 @@ const { chromium } = require('playwright-core');
   const execPath = process.env.BOTBROWSER_EXEC_PATH;
   const profileA = process.env.PROFILE_A;
   const profileB = process.env.PROFILE_B;
+  const proxyB   = process.env.PROXY_B; // optional, e.g. socks5://user:pass@host:1080
 
   if (!execPath || !profileA || !profileB) {
     console.log('Usage:');
     console.log('  BOTBROWSER_EXEC_PATH=/path/to/chrome \\');
     console.log('  PROFILE_A=/path/to/profile-a.enc \\');
     console.log('  PROFILE_B=/path/to/profile-b.enc \\');
+    console.log('  PROXY_B=socks5://user:pass@host:1080 \\');
     console.log('  node per_context_fingerprint.js');
     process.exit(1);
   }
@@ -77,14 +80,18 @@ const { chromium } = require('playwright-core');
     // 5. Now create the page. The renderer starts with the correct flags.
     const pageA = await ctxA.newPage();
 
-    // --- Context B: profile B ---
+    // --- Context B: profile B + optional proxy ---
     const { browserContextIds: before2 } = await browserCDP.send('Target.getBrowserContexts');
     const ctxB = await browser.newContext();
     const { browserContextIds: after2 } = await browserCDP.send('Target.getBrowserContexts');
     const ctxIdB = after2.filter(id => !before2.includes(id))[0];
+
+    const flagsB = [`--bot-profile=${profileB}`];
+    if (proxyB) flagsB.push(`--proxy-server=${proxyB}`);
+
     await browserCDP.send('BotBrowser.setBrowserContextFlags', {
       browserContextId: ctxIdB,
-      botbrowserFlags: [`--bot-profile=${profileB}`],
+      botbrowserFlags: flagsB,
     });
     const pageB = await ctxB.newPage();
 
@@ -103,6 +110,19 @@ const { chromium } = require('playwright-core');
 
     console.log('\nContext B fingerprint:');
     printFingerprint(fpB);
+
+    // Check proxy IP for context B (if proxy was set)
+    if (proxyB) {
+      console.log('\n--- Proxy check (Context B) ---');
+      try {
+        await pageB.goto('https://httpbin.org/ip', { timeout: 20000 });
+        const ipBody = await pageB.evaluate(() => document.body.innerText);
+        const ip = JSON.parse(ipBody).origin;
+        console.log(`  Context B exit IP: ${ip}`);
+      } catch (e) {
+        console.log(`  Proxy check failed: ${e.message}`);
+      }
+    }
 
     // Verify isolation
     console.log('\n--- Isolation check ---');

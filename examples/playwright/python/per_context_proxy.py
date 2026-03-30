@@ -1,138 +1,150 @@
 """
-⚠️ PRIVACY RESEARCH USE ONLY
+PRIVACY RESEARCH USE ONLY
 Run exclusively in authorized privacy research labs that comply with all applicable laws.
 See: https://github.com/botswin/BotBrowser/blob/main/DISCLAIMER.md
 
-BotBrowser Per-Context Proxy Example (Python)
+BotBrowser Per-Context Proxy Example (Python Playwright)
 
-This example demonstrates how to use different proxies for each browser context
-while maintaining automatic geo-detection for timezone, locale, and languages.
+Demonstrates multiple contexts with different proxies in a single browser,
+each with automatic GeoIP-driven timezone, locale, and language detection.
 
-Key Features:
-- Multiple contexts with different proxies in a single browser instance
-- Automatic timezone/locale detection per proxy
-- Cost-effective alternative to launching multiple browser processes
+Requirements:
+    pip install playwright
+    BotBrowser binary (not stock Chromium)
+
+Usage:
+    BOTBROWSER_EXEC_PATH=/path/to/chrome \
+    BOT_PROFILE_PATH=/path/to/profile.enc \
+    PROXY_US=socks5://user:pass@us-proxy:1080 \
+    PROXY_JP=socks5://user:pass@jp-proxy:1080 \
+    python per_context_proxy.py
 """
 
 import asyncio
+import json
 import os
-import tempfile
-import time
+import sys
+
 from playwright.async_api import async_playwright
 
 
-async def test_context(context, label: str, test_url: str):
-    """Test a browser context with its configured proxy."""
-    print(f"\n🧪 Testing {label}:")
+async def create_bb_context_with_proxy(browser, cdp_session, proxy):
+    """
+    Create a BrowserContext with a per-context proxy.
 
-    page = await context.new_page()
+    BotBrowser.setBrowserContextProxy sets the proxy and automatically
+    triggers GeoIP detection for timezone, locale, and languages.
+    """
+    result = await cdp_session.send("Target.getBrowserContexts")
+    before_ids = result["browserContextIds"]
 
-    # Remove Playwright bindings to maintain consistent fingerprint
-    await page.add_init_script("""
-        delete window.__playwright_binding__;
-        delete window.__pwInitScripts;
-    """)
+    context = await browser.new_context()
 
-    try:
-        await page.goto(test_url, wait_until='networkidle')
+    result = await cdp_session.send("Target.getBrowserContexts")
+    after_ids = result["browserContextIds"]
+    context_id = None
+    for cid in after_ids:
+        if cid not in before_ids:
+            context_id = cid
+            break
 
-        # Get IP information
-        ip_info = await page.text_content('pre')
-        print(f"   📡 IP Response: {ip_info.strip()}")
+    if not context_id:
+        raise RuntimeError("Could not determine browserContextId")
 
-        # Get browser timezone (automatically set by BotBrowser based on proxy IP)
-        timezone = await page.evaluate("() => Intl.DateTimeFormat().resolvedOptions().timeZone")
-        print(f"   🕐 Detected Timezone: {timezone}")
+    await cdp_session.send("BotBrowser.setBrowserContextProxy", {
+        "browserContextId": context_id,
+        "proxyServer": proxy,
+    })
 
-        # Get browser language (automatically set by BotBrowser based on proxy IP)
-        language = await page.evaluate("() => navigator.language")
-        print(f"   🌐 Detected Language: {language}")
-
-    except Exception as error:
-        print(f"   ❌ Error testing {label}: {error}")
-    finally:
-        await page.close()
+    return context, context_id
 
 
-async def test_timezone(context, label: str):
-    """Test timezone detection for a specific context."""
-    page = await context.new_page()
+async def test_context(page, label):
+    """Test a context's proxy IP and GeoIP-driven settings."""
+    print(f"\n  [{label}]")
 
     try:
-        # Test timezone consistency
-        timezone_info = await page.evaluate("""() => {
-            const now = new Date();
-            return {
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                offset: now.getTimezoneOffset(),
-                localTime: now.toLocaleString(),
-                utcTime: now.toUTCString()
-            };
-        }""")
+        await page.goto("https://httpbin.org/ip", timeout=20000)
+        body = await page.evaluate("() => document.body.innerText")
+        ip = json.loads(body).get("origin", "N/A")
+        print(f"    IP:       {ip}")
+    except Exception as e:
+        print(f"    IP check failed: {e}")
 
-        print(f"   🕐 {label} Timezone Details:")
-        print(f"      Timezone: {timezone_info['timezone']}")
-        print(f"      UTC Offset: {timezone_info['offset']} minutes")
-        print(f"      Local Time: {timezone_info['localTime']}")
+    # GeoIP-driven values (automatically set by BotBrowser based on proxy exit IP)
+    info = await page.evaluate("""() => ({
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        locale: Intl.NumberFormat().resolvedOptions().locale,
+        languages: JSON.stringify(navigator.languages),
+        offset: new Date().getTimezoneOffset(),
+    })""")
 
-    except Exception as error:
-        print(f"   ❌ Error getting timezone for {label}: {error}")
-    finally:
-        await page.close()
+    print(f"    Timezone: {info['timezone']} (offset: {info['offset']}min)")
+    print(f"    Locale:   {info['locale']}")
+    print(f"    Langs:    {info['languages']}")
 
 
 async def main():
-    """Main function to demonstrate per-context proxy usage."""
-    async with async_playwright() as p:
-        # Launch BotBrowser with profile but no global proxy
-        browser = await p.chromium.launch(
-            headless=False,  # Set to True for headless mode
-            executable_path=os.getenv('BOTBROWSER_EXEC_PATH', '/path/to/chrome'),  # Update this path
-            args=[
-                f"--bot-profile={os.getenv('BOT_PROFILE_PATH', '/absolute/path/to/profile.enc')}",  # Update this path
-                f'--user-data-dir={tempfile.gettempdir()}/botbrowser-{int(time.time())}',
-            ]
-        )
+    exec_path = os.environ.get("BOTBROWSER_EXEC_PATH")
+    profile = os.environ.get("BOT_PROFILE_PATH")
+    proxy_us = os.environ.get("PROXY_US")
+    proxy_jp = os.environ.get("PROXY_JP")
 
-        print('🚀 Browser launched successfully')
+    if not exec_path or not profile:
+        print("Usage:")
+        print("  BOTBROWSER_EXEC_PATH=/path/to/chrome \\")
+        print("  BOT_PROFILE_PATH=/path/to/profile.enc \\")
+        print("  PROXY_US=socks5://user:pass@us-proxy:1080 \\")
+        print("  PROXY_JP=socks5://user:pass@jp-proxy:1080 \\")
+        print("  python per_context_proxy.py")
+        sys.exit(1)
+
+    if not proxy_us or not proxy_jp:
+        print("Warning: Set PROXY_US and PROXY_JP for full demo. Using placeholders.")
+        proxy_us = proxy_us or "socks5://user:pass@us-proxy.example.com:1080"
+        proxy_jp = proxy_jp or "socks5://user:pass@jp-proxy.example.com:1080"
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            executable_path=exec_path,
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-audio-output",
+                f"--bot-profile={profile}",
+            ],
+        )
+        print("Browser launched")
+
+        cdp = await browser.new_browser_cdp_session()
 
         try:
-            # Context 1: US Proxy
-            print('\n📍 Creating Context 1 with US proxy...')
-            context1 = await browser.new_context(
-                proxy={'server': 'http://username:password@us-proxy.example.com:8080'}  # Replace with your US proxy
-            )
+            # Context 1: US proxy - will auto-detect US timezone/locale
+            ctx_us, _ = await create_bb_context_with_proxy(browser, cdp, proxy_us)
+            page_us = await ctx_us.new_page()
 
-            # Context 2: EU Proxy
-            print('📍 Creating Context 2 with EU proxy...')
-            context2 = await browser.new_context(
-                proxy={'server': 'socks5://username:password@eu-proxy.example.com:1080'}  # Replace with your EU proxy
-            )
-
-            # Context 3: APAC Proxy
-            print('📍 Creating Context 3 with APAC proxy...')
-            context3 = await browser.new_context(
-                proxy={'server': 'http://username:password@apac-proxy.example.com:8080'}  # Replace with your APAC proxy
-            )
+            # Context 2: JP proxy - will auto-detect JP timezone/locale
+            ctx_jp, _ = await create_bb_context_with_proxy(browser, cdp, proxy_jp)
+            page_jp = await ctx_jp.new_page()
 
             # Test each context
-            await test_context(context1, 'US Context', 'https://httpbin.org/ip')
-            await test_context(context2, 'EU Context', 'https://httpbin.org/ip')
-            await test_context(context3, 'APAC Context', 'https://httpbin.org/ip')
+            await test_context(page_us, "US Proxy")
+            await test_context(page_jp, "JP Proxy")
 
-            # Demonstrate timezone detection
-            print('\n🌍 Testing automatic timezone detection...')
-            await test_timezone(context1, 'US Context')
-            await test_timezone(context2, 'EU Context')
-            await test_timezone(context3, 'APAC Context')
+            # Verify isolation
+            tz_us = await page_us.evaluate("() => Intl.DateTimeFormat().resolvedOptions().timeZone")
+            tz_jp = await page_jp.evaluate("() => Intl.DateTimeFormat().resolvedOptions().timeZone")
+            print(f"\n  Timezone isolation: {'PASS' if tz_us != tz_jp else 'SAME'} (US={tz_us}, JP={tz_jp})")
 
-        except Exception as error:
-            print(f'❌ Error: {error}')
+            await page_us.close()
+            await page_jp.close()
+            await ctx_us.close()
+            await ctx_jp.close()
+
         finally:
-            print('\n🔄 Closing browser...')
             await browser.close()
-            print('✅ Done!')
+            print("\nDone!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
