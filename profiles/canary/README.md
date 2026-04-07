@@ -1,6 +1,6 @@
-# BotBrowser Canary Profiles (v147)
+# BotBrowser Canary Profiles (v148)
 
-Please download BotBrowser **147.0.7727.24** from [this release](https://github.com/botswin/BotBrowser/releases/tag/147.0.7727.24).
+Canary profiles for Chrome 148 will be available here once the early development build is released.
 
 > **Usage:** Run demo profiles via [CLI](../../INSTALLATION.md#download--installation) or [Launcher](../../launcher/). Automation framework integration (Puppeteer, Playwright) requires [premium profiles](../README.md#premium-profiles).
 

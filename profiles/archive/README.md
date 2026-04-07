@@ -1,6 +1,6 @@
 # Archived Profiles
 
-This directory contains previous BotBrowser profile versions (v135–v145).
+This directory contains previous BotBrowser profile versions (v135–v146).
 
 For the latest profiles, see:
 - [stable/](../stable/) — Current stable release
