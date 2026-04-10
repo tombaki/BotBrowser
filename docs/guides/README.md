@@ -16,7 +16,7 @@ These guides cover everything from initial setup to advanced deployment scenario
 | [Bot Script](getting-started/BOT_SCRIPT.md) | Automate BotBrowser without Playwright or Puppeteer using `--bot-script` and Chrome Debugger APIs. |
 | [CLI Recipes](getting-started/CLI_RECIPES.md) | Use copy-paste CLI recipes for proxy, fingerprint, identity, and deployment scenarios. |
 | [Profile Management](getting-started/PROFILE_MANAGEMENT.md) | Manage profile files, versions, and lifecycle for reproducible browser identity. |
-| [First Verification](getting-started/FIRST_VERIFICATION.md) | Validate fingerprint consistency with CreepJS, Iphey, BrowserScan, and Pixelscan. |
+| [First Verification](getting-started/FIRST_VERIFICATION.md) | Validate fingerprint consistency with CreepJS and BrowserLeaks. |
 | [Automation Consistency Practices](getting-started/AUTOMATION_CONSISTENCY.md) | Reduce framework-related inconsistency signals in Playwright/Puppeteer workflows. |
 | [CanvasLab](getting-started/CANVASLAB.md) | Record Canvas 2D, WebGL, and WebGL2 API calls to study tracking techniques and verify fingerprint protection. |
 | [AudioLab](getting-started/AUDIOLAB.md) | Record Web Audio API calls to study audio fingerprint collection and verify audio privacy protection. |

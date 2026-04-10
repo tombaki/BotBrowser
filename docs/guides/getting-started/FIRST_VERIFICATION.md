@@ -1,6 +1,6 @@
 # First Verification
 
-> Verify BotBrowser fingerprint protection with CreepJS, Iphey, BrowserScan, and Pixelscan after setup.
+> Verify BotBrowser fingerprint protection with CreepJS and BrowserLeaks after setup.
 
 ---
 
@@ -32,13 +32,11 @@ chromium-browser \
 Open one of the following URLs in the browser:
 
 - **CreepJS:** `https://abrahamjuliot.github.io/creepjs/`
-- **Iphey:** `https://iphey.com/`
-- **BrowserScan:** `https://www.browserscan.net/`
-- **Pixelscan:** `https://pixelscan.net/`
+- **BrowserLeaks:** `https://browserleaks.com/`
 
 ### 3. Check for a passing result
 
-Each tool reports a trust score or consistency status. A properly configured BotBrowser instance should show consistent fingerprint data across all reported properties.
+Each tool reports either a trust score or detailed signal output. A properly configured BotBrowser instance should show consistent fingerprint data across all reported properties.
 
 ---
 
@@ -59,14 +57,14 @@ BotBrowser profiles define all of these properties consistently at the browser e
 When you switch to a new profile version, run one fast pass first:
 
 1. Launch with only `--bot-profile` and `--proxy-server`.
-2. Open CreepJS and BrowserScan.
+2. Open CreepJS and BrowserLeaks.
 3. Confirm no obvious mismatch before adding advanced flags.
 
 ### Regression check before production rollout
 
 Use the same machine, profile, and proxy to compare before/after results:
 
-1. Capture screenshots from CreepJS, Iphey, and Pixelscan.
+1. Capture screenshots from CreepJS and BrowserLeaks.
 2. Save launch args used for each run.
 3. Diff results and investigate any new mismatch signals.
 
@@ -121,31 +119,14 @@ await browser.close();
 ```
 
 <a id="iphey"></a>
-### Iphey
+<a id="browserleaks"></a>
+### BrowserLeaks
 
-**URL:** `https://iphey.com/`
+**URL:** `https://browserleaks.com/`
 
-Iphey provides a straightforward pass/fail assessment with detailed breakdown by category.
+BrowserLeaks is useful for drilling into individual fingerprint surfaces such as Canvas, WebGL, fonts, WebRTC, timezone, and headers.
 
-Look for a green "Trusted" badge with all categories showing green checkmarks.
-
-<a id="pixelscan"></a>
-### Pixelscan
-
-**URL:** `https://pixelscan.net/`
-
-Pixelscan displays a consistency status for browser properties and network location.
-
-Look for "Consistent" status across all tested categories with no mismatches.
-
-<a id="browserscan"></a>
-### BrowserScan
-
-**URL:** `https://www.browserscan.net/`
-
-BrowserScan tests a broad range of fingerprint surfaces and displays results in a clear dashboard.
-
-Look for consistent values across all fingerprint sections with no warnings or mismatches.
+Look for values that match your loaded profile and proxy configuration with no obvious contradictions between sections.
 
 ---
 
@@ -189,9 +170,7 @@ const PROFILE = process.env.BOT_PROFILE_PATH;
 
 const sites = [
   { name: "CreepJS", url: "https://abrahamjuliot.github.io/creepjs/", wait: 15000 },
-  { name: "Iphey", url: "https://iphey.com/", wait: 10000 },
-  { name: "BrowserScan", url: "https://www.browserscan.net/", wait: 10000 },
-  { name: "Pixelscan", url: "https://pixelscan.net/", wait: 10000 },
+  { name: "BrowserLeaks", url: "https://browserleaks.com/", wait: 10000 },
 ];
 
 const browser = await chromium.launch({

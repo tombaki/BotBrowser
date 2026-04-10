@@ -31,7 +31,7 @@ chromium-browser \
 
 ### 3. Verify it works
 
-Visit [CreepJS](https://abrahamjuliot.github.io/creepjs/) or [Iphey](https://iphey.com/) to confirm the fingerprint is active. See [First Verification](FIRST_VERIFICATION.md) for a complete verification checklist.
+Visit [CreepJS](https://abrahamjuliot.github.io/creepjs/) or [BrowserLeaks](https://browserleaks.com/) to confirm the fingerprint is active. See [First Verification](FIRST_VERIFICATION.md) for a complete verification checklist.
 
 ---
 
