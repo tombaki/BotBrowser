@@ -54,10 +54,11 @@ jobs:
         working-directory: botbrowser-control
 
       - name: Build Windows
-        run: npm run build:win
+        run: npx electron-builder --win
         working-directory: botbrowser-control
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          DEBUG: electron-builder
 
       - uses: actions/upload-artifact@v4
         with:
