@@ -40,6 +40,20 @@ contextBridge.exposeInMainWorld('api', {
     showItemInFolder: (p) => ipcRenderer.invoke('shell:showItemInFolder', p),
   },
 
+  // Proxy / IP Check
+  proxy: {
+    checkIp: (proxyServer) => ipcRenderer.invoke('proxy:checkIp', proxyServer),
+  },
+
+  // Kernel Manager
+  kernel: {
+    fetchReleases: () => ipcRenderer.invoke('kernel:fetchReleases'),
+    getDir: () => ipcRenderer.invoke('kernel:getDir'),
+    listInstalled: () => ipcRenderer.invoke('kernel:listInstalled'),
+    delete: (version) => ipcRenderer.invoke('kernel:delete', version),
+    download: (opts) => ipcRenderer.invoke('kernel:download', opts),
+  },
+
   // Platform info
   platform: process.platform,
 
@@ -48,7 +62,8 @@ contextBridge.exposeInMainWorld('api', {
     const validChannels = [
       'navigate', 'action',
       'instance:started', 'instance:stopped', 'instance:error',
-      'profile:statusChanged', 'profile:cookiesSaved'
+      'profile:statusChanged', 'profile:cookiesSaved',
+      'kernel:downloadProgress', 'kernel:downloadComplete', 'kernel:downloadError',
     ];
     if (validChannels.includes(channel)) {
       const sub = (_, ...args) => callback(...args);

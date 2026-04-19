@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
+const https = require('https');
+const http = require('http');
 const Store = require('electron-store');
 const { v4: uuidv4 } = require('uuid');
 
@@ -443,6 +445,291 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 
 ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p));
 ipcMain.handle('shell:showItemInFolder', (_, p) => shell.showItemInFolder(p));
+
+// ─── IPC: Proxy / IP Check ───────────────────────────────────────────────────
+
+/**
+ * Check proxy exit IP via ip-api.com (JSON endpoint).
+ * proxyServer is optional – if provided the request is tunnelled through it.
+ * Returns the full ip-api.com JSON response object.
+ */
+ipcMain.handle('proxy:checkIp', async (_, proxyServer) => {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('IP check timed out')), 15000);
+
+    // ip-api.com fields: status, country, countryCode, region, regionName,
+    //                    city, zip, lat, lon, timezone, isp, org, as, hosting, query
+    const apiUrl = 'http://ip-api.com/json/?fields=66846719';
+
+    function doRequest(url, proxyOpts) {
+      const urlObj = new URL(url);
+      const options = {
+        hostname: proxyOpts ? proxyOpts.hostname : urlObj.hostname,
+        port:     proxyOpts ? proxyOpts.port     : (urlObj.port || 80),
+        path:     proxyOpts ? url                : urlObj.pathname + urlObj.search,
+        method:   proxyOpts ? 'CONNECT'          : 'GET',
+        headers:  { 'User-Agent': 'BotBrowserControl/1.0' }
+      };
+
+      if (!proxyOpts) {
+        // Direct request
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', d => { data += d; });
+          res.on('end', () => {
+            clearTimeout(timeout);
+            try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('Invalid JSON response')); }
+          });
+        });
+        req.on('error', e => { clearTimeout(timeout); reject(e); });
+        req.setTimeout(12000, () => { req.destroy(); clearTimeout(timeout); reject(new Error('Request timeout')); });
+        req.end();
+        return;
+      }
+
+      // HTTP CONNECT tunnel through proxy
+      const connectReq = http.request(options, (res) => {
+        clearTimeout(timeout);
+        reject(new Error(`Proxy CONNECT failed: ${res.statusCode}`));
+      });
+      connectReq.on('connect', (res, socket) => {
+        if (res.statusCode !== 200) {
+          socket.destroy();
+          clearTimeout(timeout);
+          reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
+          return;
+        }
+        const targetOptions = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || 80,
+          path: urlObj.pathname + urlObj.search,
+          method: 'GET',
+          headers: { 'User-Agent': 'BotBrowserControl/1.0', 'Host': urlObj.hostname },
+          createConnection: () => socket,
+        };
+        const tunnelReq = http.request(targetOptions, (tunnelRes) => {
+          let data = '';
+          tunnelRes.on('data', d => { data += d; });
+          tunnelRes.on('end', () => {
+            clearTimeout(timeout);
+            try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('Invalid JSON response')); }
+          });
+        });
+        tunnelReq.on('error', e => { clearTimeout(timeout); reject(e); });
+        tunnelReq.end();
+      });
+      connectReq.on('error', e => { clearTimeout(timeout); reject(e); });
+      connectReq.setTimeout(12000, () => { connectReq.destroy(); clearTimeout(timeout); reject(new Error('Proxy connect timeout')); });
+      connectReq.end();
+    }
+
+    if (!proxyServer || !proxyServer.trim()) {
+      doRequest(apiUrl, null);
+      return;
+    }
+
+    // Parse proxy URL
+    try {
+      let proxyUrl = proxyServer.trim();
+      if (!/^[a-z]+:\/\//i.test(proxyUrl)) proxyUrl = 'http://' + proxyUrl;
+      const parsed = new URL(proxyUrl);
+      const isSocks = parsed.protocol.startsWith('socks');
+      if (isSocks) {
+        // SOCKS proxies need a different approach; fall back to direct for IP check
+        // but still use ip-api.com without proxy (show actual outbound IP)
+        doRequest(apiUrl, null);
+        return;
+      }
+      const target = new URL(apiUrl);
+      const connectHost = `${target.hostname}:${target.port || 80}`;
+      const proxyOpts = {
+        hostname: parsed.hostname,
+        port: parseInt(parsed.port) || 8080,
+        path: connectHost,
+        auth: (parsed.username && parsed.password) ? `${parsed.username}:${parsed.password}` : undefined,
+      };
+      if (proxyOpts.auth) {
+        proxyOpts.headers = {
+          'Proxy-Authorization': 'Basic ' + Buffer.from(proxyOpts.auth).toString('base64')
+        };
+      }
+      doRequest(apiUrl, proxyOpts);
+    } catch (e) {
+      clearTimeout(timeout);
+      reject(new Error(`Invalid proxy URL: ${e.message}`));
+    }
+  });
+});
+
+// ─── IPC: Kernel Manager ─────────────────────────────────────────────────────
+
+const KERNEL_GITHUB_API = 'https://api.github.com/repos/botswin/BotBrowser/releases';
+
+function httpsGet(url, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirectCount > 5) { reject(new Error('Too many redirects')); return; }
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': 'BotBrowserControl/1.0',
+        'Accept': 'application/vnd.github+json',
+      }
+    }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
+        const location = res.headers.location;
+        res.resume();
+        if (!location) { reject(new Error('Redirect without location')); return; }
+        resolve(httpsGet(location, redirectCount + 1));
+        return;
+      }
+      let data = '';
+      res.on('data', d => { data += d; });
+      res.on('end', () => resolve({ statusCode: res.statusCode, body: data, headers: res.headers }));
+    });
+    req.on('error', reject);
+    req.setTimeout(20000, () => { req.destroy(); reject(new Error('Request timeout')); });
+  });
+}
+
+/**
+ * Fetch list of releases from GitHub and return simplified release info.
+ */
+ipcMain.handle('kernel:fetchReleases', async () => {
+  const res = await httpsGet(KERNEL_GITHUB_API);
+  if (res.statusCode !== 200) throw new Error(`GitHub API error: ${res.statusCode}`);
+  const releases = JSON.parse(res.body);
+  return releases.slice(0, 20).map(r => ({
+    id: r.id,
+    tagName: r.tag_name,
+    name: r.name || r.tag_name,
+    publishedAt: r.published_at,
+    prerelease: r.prerelease,
+    body: (r.body || '').slice(0, 500),
+    assets: (r.assets || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      size: a.size,
+      downloadUrl: a.browser_download_url,
+      contentType: a.content_type,
+    }))
+  }));
+});
+
+/**
+ * Get the kernels directory (where downloaded kernels are stored).
+ */
+function getKernelsDir() {
+  return path.join(app.getPath('userData'), 'kernels');
+}
+
+ipcMain.handle('kernel:getDir', () => getKernelsDir());
+
+ipcMain.handle('kernel:listInstalled', () => {
+  const dir = getKernelsDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .map(e => {
+      const vdir = path.join(dir, e.name);
+      const meta = path.join(vdir, '.meta.json');
+      let info = { version: e.name, installedAt: null, platform: null, execPath: null };
+      if (fs.existsSync(meta)) {
+        try { info = { ...info, ...JSON.parse(fs.readFileSync(meta, 'utf8')) }; } catch {}
+      }
+      return info;
+    });
+});
+
+ipcMain.handle('kernel:delete', (_, version) => {
+  const dir = path.join(getKernelsDir(), version);
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return true;
+  }
+  return false;
+});
+
+/**
+ * Download a kernel asset.
+ * Sends progress events: kernel:downloadProgress { progress, total, downloaded }
+ * On complete: kernel:downloadComplete { version, execPath }
+ * On error: kernel:downloadError { error }
+ */
+ipcMain.handle('kernel:download', async (_, { downloadUrl, fileName, version }) => {
+  const kernelsDir = getKernelsDir();
+  const versionDir = path.join(kernelsDir, version);
+  fs.mkdirSync(versionDir, { recursive: true });
+
+  const destPath = path.join(versionDir, fileName);
+
+  return new Promise((resolve, reject) => {
+    function doDownload(url, redirectCount) {
+      if (redirectCount > 5) { reject(new Error('Too many redirects')); return; }
+
+      const parsedUrl = new URL(url);
+      const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+      const req = protocol.get(url, {
+        headers: { 'User-Agent': 'BotBrowserControl/1.0' }
+      }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
+          const location = res.headers.location;
+          res.resume();
+          if (!location) { reject(new Error('Redirect without location')); return; }
+          doDownload(location, redirectCount + 1);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+          return;
+        }
+
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let downloaded = 0;
+        const fileStream = fs.createWriteStream(destPath);
+
+        res.on('data', (chunk) => {
+          downloaded += chunk.length;
+          if (total > 0) {
+            const progress = Math.round((downloaded / total) * 100);
+            mainWindow?.webContents.send('kernel:downloadProgress', { version, progress, downloaded, total });
+          }
+        });
+
+        res.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close(() => {
+            // Determine platform-specific exec path and write metadata
+            const platform = process.platform;
+            let execPath = null;
+
+            if (platform === 'darwin' && fileName.endsWith('.dmg')) {
+              execPath = null; // macOS DMG needs manual install
+            } else if (platform === 'linux' && (fileName.endsWith('.deb') || fileName.endsWith('.AppImage'))) {
+              execPath = destPath;
+            } else if (platform === 'win32' && (fileName.endsWith('.7z') || fileName.endsWith('.exe') || fileName.endsWith('.zip'))) {
+              execPath = destPath;
+            }
+
+            const meta = {
+              version, installedAt: new Date().toISOString(),
+              platform, fileName, execPath, downloadUrl
+            };
+            fs.writeFileSync(path.join(versionDir, '.meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+
+            mainWindow?.webContents.send('kernel:downloadComplete', { version, execPath, destPath });
+            resolve({ version, execPath, destPath });
+          });
+        });
+        fileStream.on('error', (e) => { reject(e); });
+      });
+
+      req.on('error', (e) => { reject(e); });
+      req.setTimeout(120000, () => { req.destroy(); reject(new Error('Download timeout')); });
+    }
+
+    doDownload(downloadUrl, 0);
+  });
+});
 
 // ─── Config File Helpers ───────────────────────────────────────────────────────
 

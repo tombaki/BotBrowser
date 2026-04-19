@@ -1261,3 +1261,154 @@ html, body {
 .about-info { flex: 1; min-width: 0; }
 .about-name { font-size: 14px; font-weight: 700; color: var(--text-1); }
 .about-desc { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+/* ── IP Check Result Bar ─────────────────────────────────────────────────── */
+.ip-result-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 10px;
+  background: rgba(39,174,96,0.08);
+  border: 1px solid rgba(39,174,96,0.2);
+  border-radius: 6px;
+  margin-top: 5px;
+  font-size: 11.5px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.ip-flag { font-size: 15px; line-height: 1; }
+.ip-result-ip { font-weight: 700; color: var(--text-1); font-family: var(--font-mono); }
+.ip-result-loc { color: var(--text-2); }
+.ip-result-isp { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+.ip-badge-dc {
+  background: rgba(231,76,60,0.15); color: var(--danger);
+  border: 1px solid rgba(231,76,60,0.3);
+  border-radius: 4px; font-size: 10px; font-weight: 700;
+  padding: 1px 5px;
+}
+.ip-result-close {
+  margin-left: auto; background: none; border: none;
+  color: var(--text-3); cursor: pointer; font-size: 11px; padding: 2px 4px;
+  border-radius: 3px;
+}
+.ip-result-close:hover { color: var(--text-1); background: var(--hover-bg); }
+
+/* spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin 0.8s linear infinite; }
+.btn.loading { opacity: 0.7; pointer-events: none; }
+
+/* ── Quick Proxy Popover ─────────────────────────────────────────────────── */
+.quick-proxy-popover {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-card);
+  border: 1px solid var(--border-m);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  width: 320px;
+  overflow: hidden;
+}
+.quick-proxy-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border-s);
+  font-size: 12.5px; font-weight: 600; color: var(--text-1);
+  background: var(--bg-sidebar);
+}
+.quick-proxy-body { padding: 12px 14px 12px; }
+.form-input-sm {
+  height: 28px; font-size: 12px;
+  padding: 0 8px;
+}
+
+/* ── Kernel Manager ──────────────────────────────────────────────────────── */
+.kernel-loading { padding: 8px 0; }
+
+.kernel-section-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.kernel-installed-section { margin-bottom: 4px; }
+
+.kernel-installed-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; margin-bottom: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-s);
+  border-radius: 6px;
+  gap: 8px;
+}
+.kernel-installed-info { display: flex; align-items: center; gap: 8px; }
+
+.kernel-version-tag {
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--bg-toolbar); color: var(--text-2);
+  border: 1px solid var(--border-s);
+}
+.kernel-version-tag.installed {
+  background: rgba(39,174,96,0.12);
+  color: var(--success);
+  border-color: rgba(39,174,96,0.3);
+}
+
+.kernel-releases-list {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 420px; overflow-y: auto;
+  padding-right: 2px;
+}
+.kernel-releases-list::-webkit-scrollbar { width: 4px; }
+.kernel-releases-list::-webkit-scrollbar-thumb { background: var(--border-m); border-radius: 2px; }
+
+.kernel-release-row {
+  background: var(--bg-input);
+  border: 1px solid var(--border-s);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.kernel-release-row.kernel-installed-row-highlight {
+  border-color: rgba(39,174,96,0.25);
+  background: rgba(39,174,96,0.04);
+}
+
+.kernel-release-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+  flex-wrap: wrap; gap: 4px;
+}
+
+.kernel-progress-wrap {
+  position: relative; height: 6px;
+  background: var(--border-s); border-radius: 3px;
+  overflow: hidden; margin-bottom: 8px;
+}
+.kernel-progress-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--accent); border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.kernel-progress-label {
+  position: absolute; right: 0; top: -18px;
+  font-size: 10px; color: var(--text-3);
+}
+
+.kernel-assets { display: flex; flex-direction: column; gap: 4px; }
+
+.kernel-asset-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-xs, var(--border-s));
+  border-radius: 5px;
+}
+.kernel-asset-name {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kernel-asset-size {
+  font-size: 10.5px; color: var(--text-3);
+  flex-shrink: 0; white-space: nowrap;
+}

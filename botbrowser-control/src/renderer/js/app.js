@@ -13,6 +13,18 @@
   const IS_WIN = window.api.platform === 'win32';
   const IS_MAC = window.api.platform === 'darwin';
 
+  // Kernel manager state
+  let kernelReleases = null;
+  let kernelInstalled = [];
+  let kernelDownloads = {}; // version -> { progress, status }
+
+  // IP check state
+  let ipCheckResults = {}; // profileId -> result
+  let ipCheckLoading = {}; // profileId -> bool
+
+  // Quick proxy popover state
+  let quickProxyProfileId = null;
+
   // ─── Icons ──────────────────────────────────────────────────────────────────
   const I = {
     play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
@@ -34,6 +46,12 @@
     folder: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>',
     globe: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
     info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>',
+    download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+    kernel: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>',
+    proxy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
+    android: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.341A5.98 5.98 0 0 0 18 13a5.98 5.98 0 0 0-.477-2.341l2.21-2.21a9.01 9.01 0 0 1 0 9.102l-2.21-2.21zM13 5.523A5.98 5.98 0 0 0 10.659 5l-2.21-2.21a9.01 9.01 0 0 1 9.102 0L15.341 5A5.98 5.98 0 0 0 13 5.523zM8.659 5L6.448 2.79a9.01 9.01 0 0 0-4.239 8.551A9.01 9.01 0 0 0 6.449 19.21L8.659 17A6 6 0 0 1 8 13a6 6 0 0 1 .659-6zM13 20.477A5.98 5.98 0 0 0 15.341 21l2.21 2.21a9.01 9.01 0 0 1-9.102 0L10.659 21A5.98 5.98 0 0 0 13 20.477zM12 9a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>',
+    refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
+    use: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
   };
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -162,6 +180,20 @@
       showToast(`${count} cookies saved for profile`, 'success');
       renderView();
     });
+
+    // Kernel download events
+    window.api.on('kernel:downloadProgress', ({ version, progress }) => {
+      kernelDownloads[version] = { ...(kernelDownloads[version] || {}), progress, status: 'downloading' };
+      updateKernelProgressUI(version, progress);
+    });
+    window.api.on('kernel:downloadComplete', ({ version }) => {
+      kernelDownloads[version] = { progress: 100, status: 'done' };
+      showToast(`Kernel ${version} downloaded.`, 'success');
+      window.api.kernel.listInstalled().then(list => {
+        kernelInstalled = list;
+        if (currentView === 'settings') renderSettings();
+      });
+    });
   }
 
   function handleAction(action, data, e) {
@@ -186,6 +218,18 @@
       case 'tab-switch':        switchTab(data.tab); break;
       case 'add-header':        addCustomHeader(); break;
       case 'remove-header':     removeCustomHeader(data.key); break;
+      // IP check
+      case 'check-ip':          checkProfileIp(data.id); break;
+      // Quick proxy
+      case 'quick-proxy':       openQuickProxy(data.id, e); break;
+      case 'save-quick-proxy':  saveQuickProxy(data.id); break;
+      case 'close-quick-proxy': closeQuickProxy(); break;
+      // Kernel manager
+      case 'kernel-refresh':    fetchKernelReleases(true); break;
+      case 'kernel-download':   downloadKernel(data.version, data.url, data.filename); break;
+      case 'kernel-delete':     deleteKernel(data.version); break;
+      case 'kernel-use':        useKernelPath(data.execpath); break;
+      case 'kernel-open-dir':   window.api.shell.openPath(data.dir); break;
     }
   }
 
@@ -363,11 +407,14 @@
                   ? `<button class="btn btn-danger btn-sm" data-action="stop-profile" data-id="${profile.id}">${I.stop} Stop</button>`
                   : `<button class="btn btn-primary btn-sm" data-action="launch-profile" data-id="${profile.id}">${I.play} Launch</button>`
                 }
+                ${profile.proxyServer ? `<button class="btn btn-secondary btn-sm btn-icon" data-action="quick-proxy" data-id="${profile.id}" title="Change proxy">${I.proxy}</button>` : `<button class="btn btn-ghost btn-sm btn-icon" data-action="quick-proxy" data-id="${profile.id}" title="Set proxy">${I.proxy}</button>`}
+                ${profile.proxyServer ? `<button class="btn btn-secondary btn-sm btn-icon${ipCheckLoading[profile.id] ? ' loading' : ''}" data-action="check-ip" data-id="${profile.id}" title="Check IP">${ipCheckLoading[profile.id] ? '<span class="spin">⟳</span>' : I.globe}</button>` : ''}
                 <button class="btn btn-secondary btn-sm btn-icon" data-action="edit-profile" data-id="${profile.id}" title="Edit">${I.edit}</button>
                 <button class="btn btn-secondary btn-sm btn-icon" data-action="duplicate-profile" data-id="${profile.id}" title="Duplicate">${I.copy}</button>
                 <button class="btn btn-danger btn-sm btn-icon" data-action="delete-profile" data-id="${profile.id}" title="Delete">${I.trash}</button>
                 <button class="btn btn-ghost btn-sm btn-icon" data-action="show-context" data-id="${profile.id}" title="More">⋮</button>
               </div>
+              ${ipCheckResults[profile.id] ? renderIpBadge(profile.id) : ''}
             </div>`;
           }).join('')}
         </div>`}
@@ -502,6 +549,25 @@
               <input class="form-input" id="s-defaultProxy" value="${esc(s.defaultProxy || '')}" placeholder="http://user:pass@host:port  or  socks5://host:port">
               <div class="form-hint">Supports HTTP, HTTPS, SOCKS4, SOCKS5 with optional credentials.</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Section: Kernel Manager -->
+        <div class="settings-card" id="kernel-manager-card">
+          <div class="settings-card-header">
+            <div class="settings-card-icon" style="background:rgba(155,89,182,0.1);border-color:rgba(155,89,182,0.2)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#9b59b6"><path d="M4 20h16v-2H4v2zm8-18L4 10h4v4h8v-4h4L12 2z"/></svg>
+            </div>
+            <div>
+              <div class="settings-card-title">Kernel Manager</div>
+              <div class="settings-card-desc">Download and manage BotBrowser browser kernels from GitHub releases</div>
+            </div>
+            <div style="margin-left:auto">
+              <button class="btn btn-secondary btn-sm" data-action="kernel-refresh" id="kernel-refresh-btn">${I.refresh} Refresh</button>
+            </div>
+          </div>
+          <div class="settings-card-body">
+            ${renderKernelManager()}
           </div>
         </div>
 
@@ -1145,6 +1211,303 @@
   }
 
   // ─── Profile Actions ──────────────────────────────────────────────────────────
+  // ─── IP Check ─────────────────────────────────────────────────────────────
+  function renderIpBadge(profileId) {
+    const r = ipCheckResults[profileId];
+    if (!r) return '';
+    const isHosting = r.hosting || r.proxy;
+    const flag = r.countryCode ? `<span class="ip-flag">${countryCodeToEmoji(r.countryCode)}</span>` : '';
+    const datacenter = isHosting ? `<span class="ip-badge-dc" title="Datacenter/proxy detected">DC</span>` : '';
+    return `<div class="ip-result-bar" data-profile-id="${profileId}">
+      ${flag}
+      <span class="ip-result-ip">${esc(r.query || '')}</span>
+      <span class="ip-result-loc">${esc([r.city, r.countryCode].filter(Boolean).join(', '))}</span>
+      <span class="ip-result-isp">${esc((r.isp || r.org || '').slice(0, 30))}</span>
+      ${datacenter}
+      <button class="ip-result-close" title="Dismiss" onclick="this.closest('.ip-result-bar').remove()">✕</button>
+    </div>`;
+  }
+
+  function countryCodeToEmoji(cc) {
+    if (!cc || cc.length !== 2) return '🌐';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)));
+  }
+
+  async function checkProfileIp(profileId) {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+    if (ipCheckLoading[profileId]) return;
+
+    ipCheckLoading[profileId] = true;
+    renderProfiles(); // show spinner
+
+    try {
+      const result = await window.api.proxy.checkIp(profile.proxyServer || '');
+      ipCheckResults[profileId] = result;
+      if (result.status === 'fail') {
+        showToast(`IP check failed: ${result.message || 'Unknown error'}`, 'error');
+      } else {
+        const isHosting = result.hosting || result.proxy;
+        const loc = [result.city, result.regionName, result.country].filter(Boolean).join(', ');
+        showToast(
+          `${countryCodeToEmoji(result.countryCode)} ${result.query} · ${loc}${isHosting ? ' · ⚠ Datacenter/Proxy' : ''}`,
+          isHosting ? 'warning' : 'success',
+          6000
+        );
+      }
+    } catch (e) {
+      showToast(`IP check error: ${e.message}`, 'error');
+    } finally {
+      ipCheckLoading[profileId] = false;
+      renderProfiles();
+    }
+  }
+
+  // ─── Quick Proxy Popover ──────────────────────────────────────────────────
+  function openQuickProxy(profileId, e) {
+    // Remove any existing popover
+    closeQuickProxy();
+    quickProxyProfileId = profileId;
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+
+    const ipResult = ipCheckResults[profileId];
+    const autoFillBtn = (ipResult && ipResult.query)
+      ? `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('qp-proxyip').value='${ipResult.query}'" title="Auto-fill from last IP check">↑ ${ipResult.query}</button>`
+      : '';
+
+    const popover = document.createElement('div');
+    popover.id = 'quick-proxy-popover';
+    popover.className = 'quick-proxy-popover';
+    popover.innerHTML = `
+      <div class="quick-proxy-header">
+        <span>${I.proxy} Quick Proxy</span>
+        <button class="btn btn-ghost btn-sm btn-icon" data-action="close-quick-proxy">✕</button>
+      </div>
+      <div class="quick-proxy-body">
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label" style="font-size:11px;margin-bottom:4px">Proxy Server</label>
+          <input class="form-input form-input-sm" id="qp-proxy" placeholder="http://user:pass@host:port" value="${esc(profile.proxyServer || '')}">
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label" style="font-size:11px;margin-bottom:4px">Proxy IP (exit IP override)</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="form-input form-input-sm" id="qp-proxyip" placeholder="203.0.113.1" value="${esc(profile.proxyIp || '')}">
+            ${autoFillBtn}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" data-action="check-ip" data-id="${profileId}">${I.globe} Check IP</button>
+          <button class="btn btn-primary btn-sm" data-action="save-quick-proxy" data-id="${profileId}">${I.check} Apply</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(popover);
+
+    // Position near the button
+    const btn = e.target.closest('[data-action="quick-proxy"]');
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      let left = rect.left;
+      let top = rect.bottom + 6;
+      if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
+      if (top + 220 > window.innerHeight) top = rect.top - 226;
+      popover.style.left = left + 'px';
+      popover.style.top = top + 'px';
+    }
+
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', onOutsideClickQP);
+    }, 10);
+  }
+
+  function onOutsideClickQP(e) {
+    if (!e.target.closest('#quick-proxy-popover') && !e.target.closest('[data-action="quick-proxy"]')) {
+      closeQuickProxy();
+    }
+  }
+
+  function closeQuickProxy() {
+    const pop = document.getElementById('quick-proxy-popover');
+    if (pop) pop.remove();
+    quickProxyProfileId = null;
+    document.removeEventListener('click', onOutsideClickQP);
+  }
+
+  async function saveQuickProxy(profileId) {
+    const proxyServer = (document.getElementById('qp-proxy')?.value || '').trim();
+    const proxyIp = (document.getElementById('qp-proxyip')?.value || '').trim();
+    try {
+      const updated = await window.api.profiles.update(profileId, { proxyServer, proxyIp });
+      const idx = profiles.findIndex(p => p.id === profileId);
+      if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
+      showToast('Proxy updated.', 'success');
+      closeQuickProxy();
+      renderProfiles();
+    } catch (e) {
+      showToast(`Failed to update proxy: ${e.message}`, 'error');
+    }
+  }
+
+  // ─── Kernel Manager ───────────────────────────────────────────────────────
+  function renderKernelManager() {
+    const platform = window.api.platform;
+    const platformAssetExt = platform === 'win32' ? ['.7z', '-win', '.exe'] :
+                              platform === 'darwin' ? ['.dmg', '-mac'] :
+                              ['.deb', '.AppImage', '-linux'];
+
+    if (!kernelReleases) {
+      return `<div class="kernel-loading">
+        <div style="color:var(--text-3);font-size:13px;padding:8px 0">
+          ${I.download} Click <strong>Refresh</strong> to fetch available releases from GitHub.
+        </div>
+      </div>`;
+    }
+
+    if (kernelReleases.length === 0) {
+      return `<div class="kernel-loading"><div style="color:var(--text-3);font-size:13px;padding:8px 0">No releases found.</div></div>`;
+    }
+
+    const installedVersions = new Set(kernelInstalled.map(k => k.version));
+
+    const installedSection = `
+      <div class="kernel-installed-section">
+        <div class="kernel-section-label">Installed</div>
+        ${kernelInstalled.length === 0
+          ? `<div style="color:var(--text-3);font-size:12px;padding:4px 0">No kernels installed yet.</div>`
+          : kernelInstalled.map(k => `
+            <div class="kernel-installed-row">
+              <div class="kernel-installed-info">
+                <span class="kernel-version-tag installed">${esc(k.version)}</span>
+                <span style="color:var(--text-3);font-size:11px">${k.installedAt ? timeAgo(k.installedAt) : ''}</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                ${k.execPath ? `<button class="btn btn-primary btn-sm" data-action="kernel-use" data-execpath="${esc(k.execPath)}" title="Use as BotBrowser executable">${I.use} Use</button>` : ''}
+                <button class="btn btn-danger btn-sm btn-icon" data-action="kernel-delete" data-version="${esc(k.version)}" title="Delete">${I.trash}</button>
+              </div>
+            </div>
+          `).join('')
+        }
+      </div>`;
+
+    const releasesSection = `
+      <div class="kernel-section-label" style="margin-top:16px">Available Releases</div>
+      <div class="kernel-releases-list">
+        ${kernelReleases.map(release => {
+          const isInstalled = installedVersions.has(release.tagName);
+          const dl = kernelDownloads[release.tagName];
+          const platformAssets = release.assets.filter(a =>
+            platformAssetExt.some(ext => a.name.toLowerCase().includes(ext.toLowerCase()))
+          );
+          const displayAssets = (platformAssets.length > 0 ? platformAssets : release.assets).slice(0, 5);
+
+          return `
+          <div class="kernel-release-row${isInstalled ? ' kernel-installed-row-highlight' : ''}">
+            <div class="kernel-release-header">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="kernel-version-tag${isInstalled ? ' installed' : ''}">${esc(release.tagName)}</span>
+                ${release.prerelease ? '<span class="badge-ent" style="font-size:9px;padding:1px 5px">PRE</span>' : ''}
+                <span style="color:var(--text-3);font-size:11px">${release.publishedAt ? new Date(release.publishedAt).toLocaleDateString() : ''}</span>
+                ${isInstalled ? `<span style="color:var(--success);font-size:11px">${I.check} Installed</span>` : ''}
+              </div>
+            </div>
+            ${dl && dl.status === 'downloading'
+              ? `<div class="kernel-progress-wrap" id="kp-${release.tagName.replace(/[^a-zA-Z0-9]/g,'_')}">
+                   <div class="kernel-progress-bar" style="width:${dl.progress||0}%"></div>
+                   <span class="kernel-progress-label">${dl.progress||0}%</span>
+                 </div>`
+              : ''
+            }
+            <div class="kernel-assets">
+              ${displayAssets.map(asset => `
+                <div class="kernel-asset-row">
+                  <span class="kernel-asset-name" title="${esc(asset.name)}">${esc(asset.name)}</span>
+                  <span class="kernel-asset-size">${formatBytes(asset.size)}</span>
+                  ${(!dl || dl.status !== 'downloading')
+                    ? `<button class="btn btn-secondary btn-sm" data-action="kernel-download"
+                         data-version="${esc(release.tagName)}"
+                         data-url="${esc(asset.downloadUrl)}"
+                         data-filename="${esc(asset.name)}">${I.download} Download</button>`
+                    : `<span style="color:var(--text-3);font-size:11px">Downloading…</span>`
+                  }
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    return installedSection + releasesSection;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  async function fetchKernelReleases(force) {
+    if (kernelReleases && !force) return;
+    const btn = document.getElementById('kernel-refresh-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⟳ Fetching…'; }
+    try {
+      const [releases, installed] = await Promise.all([
+        window.api.kernel.fetchReleases(),
+        window.api.kernel.listInstalled(),
+      ]);
+      kernelReleases = releases;
+      kernelInstalled = installed;
+    } catch (e) {
+      showToast(`Failed to fetch releases: ${e.message}`, 'error', 5000);
+      kernelReleases = [];
+    } finally {
+      if (currentView === 'settings') renderSettings();
+    }
+  }
+
+  async function downloadKernel(version, url, filename) {
+    if (kernelDownloads[version]?.status === 'downloading') return;
+    kernelDownloads[version] = { progress: 0, status: 'downloading' };
+    if (currentView === 'settings') renderSettings();
+    try {
+      await window.api.kernel.download({ downloadUrl: url, fileName: filename, version });
+    } catch (e) {
+      kernelDownloads[version] = { status: 'error' };
+      showToast(`Download failed: ${e.message}`, 'error', 5000);
+      if (currentView === 'settings') renderSettings();
+    }
+  }
+
+  function updateKernelProgressUI(version, progress) {
+    const safeV = version.replace(/[^a-zA-Z0-9]/g, '_');
+    const wrap = document.getElementById(`kp-${safeV}`);
+    if (wrap) {
+      const fill = wrap.querySelector('.kernel-progress-bar');
+      const label = wrap.querySelector('.kernel-progress-label');
+      if (fill) fill.style.width = progress + '%';
+      if (label) label.textContent = progress + '%';
+    }
+  }
+
+  async function deleteKernel(version) {
+    if (!confirm(`Delete kernel ${version}? This cannot be undone.`)) return;
+    await window.api.kernel.delete(version);
+    kernelInstalled = kernelInstalled.filter(k => k.version !== version);
+    showToast(`Kernel ${version} deleted.`, 'success');
+    if (currentView === 'settings') renderSettings();
+  }
+
+  async function useKernelPath(execPath) {
+    if (!execPath) { showToast('No executable path for this kernel.', 'error'); return; }
+    await window.api.settings.set({ botBrowserPath: execPath });
+    settings.botBrowserPath = execPath;
+    showToast('BotBrowser path updated to this kernel.', 'success');
+    if (currentView === 'settings') renderSettings();
+  }
+
+
   async function launchProfile(id) {
     try {
       await window.api.browser.launch(id);
@@ -1285,6 +1648,30 @@
       canvasRecordFile: val('f-canvasRecordFile'),
       audioRecordFile: val('f-audioRecordFile'),
     };
+
+    // ── Auto-detect Android profiles ──────────────────────────────────────────
+    // If platform is Android, automatically apply mobile settings
+    const isAndroid = profileData.platform === 'Android';
+    const hasMobileModel = profileData.model && /android|samsung|pixel|xiaomi|huawei|oneplus|oppo|vivo|lg|htc|sony|moto/i.test(profileData.model);
+    if (isAndroid || hasMobileModel) {
+      if (profileData.mobile === '' || profileData.mobile === false) {
+        profileData.mobile = true;
+      }
+      if (profileData.orientation === 'profile' || !profileData.orientation) {
+        profileData.orientation = 'portrait';
+      }
+      if (!profileData.mobileForceTouch) {
+        profileData.mobileForceTouch = true;
+      }
+      if (isAndroid || hasMobileModel) {
+        if (!profileData.architecture) profileData.architecture = 'arm64';
+        if (!profileData.bitness) profileData.bitness = '64';
+      }
+      // Show info toast on first detection
+      if (!editingProfileId) {
+        showToast('Android detected — mobile settings auto-applied.', 'info', 4000);
+      }
+    }
 
     try {
       if (editingProfileId) {
