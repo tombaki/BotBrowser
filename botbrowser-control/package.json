@@ -6,7 +6,6 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-
     "build": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --win --linux",
     "build:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "build:mac:x64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
@@ -19,11 +18,16 @@
     "build:linux:x64": "electron-builder --linux --x64",
     "build:linux:arm64": "electron-builder --linux --arm64",
     "build:linux:rpm": "electron-builder --linux --x64 --config.linux.target=rpm",
-
     "pack": "electron-builder --dir",
     "postinstall": "electron-builder install-app-deps"
   },
-  "keywords": ["botbrowser", "antidetect", "fingerprint", "privacy", "browser"],
+  "keywords": [
+    "botbrowser",
+    "antidetect",
+    "fingerprint",
+    "privacy",
+    "browser"
+  ],
   "author": {
     "name": "BotBrowser Control",
     "email": "support@botbrowser.io"
@@ -41,7 +45,7 @@
   "build": {
     "appId": "io.botbrowser.control",
     "productName": "BotBrowser Control",
-    "copyright": "Copyright © 2025 BotBrowser",
+    "copyright": "Copyright \u00a9 2025 BotBrowser",
     "directories": {
       "output": "dist",
       "buildResources": "build-resources"
@@ -52,13 +56,24 @@
       "!node_modules/.cache",
       "!**/*.map"
     ],
-
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "src/assets/icon.png",
       "target": [
-        { "target": "dmg",  "arch": ["x64", "arm64"] },
-        { "target": "zip",  "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "darkModeSupport": true,
       "hardenedRuntime": false,
@@ -66,58 +81,102 @@
       "identity": null,
       "minimumSystemVersion": "11.0"
     },
-
     "dmg": {
       "title": "BotBrowser Control",
-      "background": null,
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
-      "window": { "width": 540, "height": 380 }
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     },
-
     "win": {
-      "icon": "src/assets/icon.png",
+      "icon": "src/assets/icon.ico",
       "target": [
-        { "target": "nsis",    "arch": ["x64", "arm64"] },
-        { "target": "portable","arch": ["x64"] },
-        { "target": "zip",     "arch": ["x64", "arm64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "verifyUpdateCodeSignature": false,
       "forceCodeSigning": false
     },
-
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "src/assets/icon.png",
-      "uninstallerIcon": "src/assets/icon.png",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "BotBrowser Control"
     },
-
     "linux": {
       "icon": "src/assets/icon.png",
       "category": "Development",
       "target": [
-        { "target": "AppImage", "arch": ["x64", "arm64"] },
-        { "target": "deb",      "arch": ["x64", "arm64"] },
-        { "target": "tar.gz",   "arch": ["x64", "arm64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "maintainer": "BotBrowser <support@botbrowser.io>",
       "description": "Professional Browser Profile Manager for BotBrowser"
     },
-
     "deb": {
-      "depends": ["libnotify4", "libxtst6", "libnss3"]
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ]
     },
-
     "rpm": {
-      "depends": ["libnotify", "libXtst", "nss"]
+      "depends": [
+        "libnotify",
+        "libXtst",
+        "nss"
+      ]
     },
-
     "publish": null
   }
 }
