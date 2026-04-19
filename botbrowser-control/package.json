@@ -1,6 +1,6 @@
 {
   "name": "botbrowser-control",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "BotBrowser Control Center - Professional Browser Profile Manager",
   "main": "src/main/main.js",
   "scripts": {
@@ -45,7 +45,7 @@
   "build": {
     "appId": "io.botbrowser.control",
     "productName": "BotBrowser Control",
-    "copyright": "Copyright © 2025 BotBrowser",
+    "copyright": "Copyright \u00a9 2025 BotBrowser",
     "directories": {
       "output": "dist",
       "buildResources": "build-resources"

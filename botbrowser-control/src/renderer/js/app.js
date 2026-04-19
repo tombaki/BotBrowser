@@ -86,13 +86,15 @@
 
   function countryCodeToEmoji(cc) {
     if (!cc || cc.length !== 2) return '🌐';
-    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)));
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)));
   }
 
-  // Normalize proxy string: if no scheme, default to socks5://
+  // Normalize proxy string: strip duplicate schemes, then default to socks5:// if no scheme
   function normalizeProxy(s) {
     if (!s || !s.trim()) return '';
     s = s.trim();
+    // Strip duplicate scheme: e.g. socks5://socks5:// → socks5://
+    s = s.replace(/^(socks5?[ah]?|https?):\/\/(socks5?[ah]?|https?):\/\//i, '$1://');
     if (!/^[a-z]+:\/\//i.test(s)) return 'socks5://' + s;
     return s;
   }
@@ -180,8 +182,8 @@
       if (!e.target.closest('.context-menu')) {
         document.querySelectorAll('.context-menu').forEach(m => m.remove());
       }
-      // Close inline proxy editor on outside click
-      if (inlineProxyEditId && !e.target.closest('.proxy-inline-editor') && !e.target.closest('[data-action="open-proxy-editor"]')) {
+      // Close inline proxy editor on outside click (not on the input itself or recheck button)
+      if (inlineProxyEditId && !e.target.closest('.proxy-inline-input') && !e.target.closest('[data-action="open-proxy-editor"]') && !e.target.closest('[data-action="check-ip"]')) {
         closeInlineProxyEditor();
       }
       const btn = e.target.closest('[data-action]');
@@ -290,7 +292,7 @@
       // IP check
       case 'check-ip':              checkProfileIp(data.id); break;
       // Inline proxy editor
-      case 'open-proxy-editor':     openInlineProxyEditor(data.id, e); break;
+      case 'open-proxy-editor':     openInlineProxyEditor(data.id); break;
       case 'save-inline-proxy':     saveInlineProxy(data.id); break;
       case 'cancel-inline-proxy':   closeInlineProxyEditor(); break;
       // Kernel manager
@@ -484,10 +486,9 @@
         </div>`}
     `;
 
-    // If inline proxy editor is open for a profile, re-mount it
+    // If inline proxy editor is open for a profile, re-mount the input
     if (inlineProxyEditId) {
-      const cell = document.getElementById(`proxy-cell-${inlineProxyEditId}`);
-      if (cell) mountInlineProxyEditor(inlineProxyEditId, cell);
+      mountInlineProxyInput(inlineProxyEditId);
     }
   }
 
@@ -538,11 +539,10 @@
     }
 
     return `<div class="proxy-cell-content">
-      <div class="proxy-cell-row" data-action="open-proxy-editor" data-id="${profile.id}" title="Click to edit proxy" style="cursor:pointer">
+      <div class="proxy-cell-row">
         ${statusDot}
         ${schemeBadge}
-        <span class="proxy-host-text">${esc(proxyHost)}</span>
-        <span class="proxy-edit-hint">${I.edit}</span>
+        <span class="proxy-host-text" data-action="open-proxy-editor" data-id="${profile.id}" title="Click to edit proxy" style="cursor:text">${esc(proxyHost)}</span>
       </div>
       ${flagDisplay ? `<div class="proxy-ip-row">${flagDisplay}
         <button class="proxy-recheck-btn${isLoading?' loading':''}" data-action="check-ip" data-id="${profile.id}" title="Re-check IP">↺</button>
@@ -550,94 +550,71 @@
     </div>`;
   }
 
-  // ─── Inline Proxy Editor ──────────────────────────────────────────────────────
-  function openInlineProxyEditor(profileId, e) {
-    if (inlineProxyEditId === profileId) {
-      closeInlineProxyEditor();
-      return;
-    }
-    closeInlineProxyEditor();
+  // ─── GoLogin-style Inline Proxy Editor ──────────────────────────────────────────────
+  // Clicking the proxy host text converts it directly into an <input> in-place.
+  // No popup, no expanded editor — just a plain input field inline.
+
+  function openInlineProxyEditor(profileId) {
+    if (inlineProxyEditId === profileId) return; // already editing
+    if (inlineProxyEditId) closeInlineProxyEditor();
     inlineProxyEditId = profileId;
-    const cell = document.getElementById(`proxy-cell-${profileId}`);
-    if (cell) mountInlineProxyEditor(profileId, cell);
+    mountInlineProxyInput(profileId);
   }
 
-  function mountInlineProxyEditor(profileId, cell) {
+  function mountInlineProxyInput(profileId) {
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) return;
     const current = profile.proxyServer || '';
-    const currentIp = profile.proxyIp || '';
-    const ipResult = ipCheckResults[profileId];
-    const autoFill = (ipResult && ipResult.query) ? ipResult.query : '';
 
-    // Status indicator inside editor
-    let editorStatus = '';
-    if (ipCheckLoading[profileId]) {
-      editorStatus = `<span class="pie-status checking">⟳ Checking…</span>`;
-    } else if (ipResult && ipResult.status !== 'fail') {
-      const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '';
-      const country = ipResult.countryCode || '';
-      const isHosting = ipResult.hosting || ipResult.proxy;
-      editorStatus = `<span class="pie-status ok">${flag} ${esc(ipResult.query||'')} ${esc(country)}${isHosting?' ⚠':''}</span>`;
-    } else if (ipCheckResults[profileId] === null) {
-      editorStatus = `<span class="pie-status error">✗ Check failed</span>`;
-    }
+    // Find the proxy-host-text span and replace it with an input in-place
+    const cell = document.getElementById(`proxy-cell-${profileId}`);
+    if (!cell) return;
+    const hostSpan = cell.querySelector('.proxy-host-text');
+    if (!hostSpan) return;
 
-    cell.innerHTML = `<div class="proxy-inline-editor">
-      <div class="pie-row">
-        <span class="pie-label">Proxy</span>
-        <input class="pie-input" id="pie-proxy-${profileId}" value="${esc(current)}" placeholder="socks5://host:port" autocomplete="off" spellcheck="false">
-      </div>
-      ${editorStatus ? `<div class="pie-row">${editorStatus}</div>` : ''}
-      <div class="pie-row">
-        <span class="pie-label">IP</span>
-        <input class="pie-input" id="pie-ip-${profileId}" value="${esc(currentIp)}" placeholder="exit IP override (optional)" autocomplete="off">
-        ${autoFill ? `<button class="pie-autofill" onclick="document.getElementById('pie-ip-${profileId}').value='${autoFill}'" title="Use detected IP: ${autoFill}">↑ ${autoFill}</button>` : ''}
-      </div>
-      <div class="pie-actions">
-        <button class="btn btn-ghost btn-sm" data-action="cancel-inline-proxy">Cancel</button>
-        <button class="btn btn-primary btn-sm" data-action="save-inline-proxy" data-id="${profileId}">${I.check} Save</button>
-      </div>
-    </div>`;
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'proxy-inline-input';
+    inp.id = `proxy-inline-input-${profileId}`;
+    inp.value = current;
+    inp.placeholder = 'socks5://host:port';
+    inp.autocomplete = 'off';
+    inp.spellcheck = false;
+    hostSpan.replaceWith(inp);
+    inp.focus();
+    inp.select();
 
-    // Focus proxy input
-    const inp = document.getElementById(`pie-proxy-${profileId}`);
-    if (inp) {
-      inp.focus(); inp.select();
-      // Debounced auto-check when proxy value changes
-      let debounceTimer = null;
-      inp.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          const val = normalizeProxy(inp.value.trim());
-          if (val && val !== profile.proxyServer) {
-            // Temporarily check with the new value without saving
-            checkProxyValueQuick(profileId, val);
-          }
-        }, 900);
-      });
-      // Also check on Enter key
-      inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') saveInlineProxy(profileId);
-        if (e.key === 'Escape') closeInlineProxyEditor();
-      });
-    }
+    // Debounced auto-check as user types
+    let debounceTimer = null;
+    inp.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const val = normalizeProxy(inp.value.trim());
+        if (val) checkProxyValueQuick(profileId, val);
+      }, 900);
+    });
+
+    inp.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); saveInlineProxy(profileId); }
+      if (ev.key === 'Escape') { ev.preventDefault(); closeInlineProxyEditor(); }
+    });
+
+    inp.addEventListener('blur', () => {
+      // Small delay so a click on the recheck button doesn't prematurely cancel
+      setTimeout(() => {
+        if (inlineProxyEditId === profileId) saveInlineProxy(profileId);
+      }, 150);
+    });
   }
 
-  // Quick IP check with a specific proxy value (without saving profile)
+  // Quick IP check while typing (updates dot + flag row without disturbing the input)
   async function checkProxyValueQuick(profileId, proxyValue) {
     if (ipCheckLoading[profileId]) return;
     ipCheckLoading[profileId] = true;
-    // Update status in editor
     const cell = document.getElementById(`proxy-cell-${profileId}`);
-    if (cell && inlineProxyEditId === profileId) {
-      const statusEl = cell.querySelector('.pie-status');
-      if (statusEl) { statusEl.className = 'pie-status checking'; statusEl.textContent = '⟳ Checking…'; }
-      else {
-        // re-mount to show checking state
-        const profile = profiles.find(p => p.id === profileId);
-        if (profile) mountInlineProxyEditor(profileId, cell);
-      }
+    if (cell) {
+      const dot = cell.querySelector('.proxy-status-dot');
+      if (dot) { dot.className = 'proxy-status-dot checking'; dot.title = 'Checking…'; }
     }
     try {
       const result = await window.api.proxy.checkIp(proxyValue);
@@ -648,28 +625,58 @@
       ipCheckLoading[profileId] = false;
       const cell2 = document.getElementById(`proxy-cell-${profileId}`);
       if (cell2 && inlineProxyEditId === profileId) {
-        const profile = profiles.find(p => p.id === profileId);
-        if (profile) mountInlineProxyEditor(profileId, cell2);
+        const ipResult = ipCheckResults[profileId];
+        // Update dot
+        const dot = cell2.querySelector('.proxy-status-dot');
+        if (dot) {
+          if (ipResult && ipResult.status !== 'fail') {
+            const isHosting = ipResult.hosting || ipResult.proxy;
+            dot.className = `proxy-status-dot ok${isHosting ? ' dc' : ''}`;
+            dot.title = `${ipResult.query} · ${ipResult.city||''}, ${ipResult.country||''}`;
+          } else {
+            dot.className = 'proxy-status-dot error';
+            dot.title = 'Check failed';
+          }
+        }
+        // Update or create the flag/ip row
+        const proxyContent = cell2.querySelector('.proxy-cell-content');
+        let ipRow = cell2.querySelector('.proxy-ip-row');
+        if (ipResult && ipResult.status !== 'fail') {
+          const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '';
+          const country = ipResult.countryCode || '';
+          const isHosting = ipResult.hosting || ipResult.proxy;
+          const flagHtml = `<span class="proxy-flag-country" title="${esc(ipResult.query)}">${flag} <span class="proxy-country-code">${esc(country)}</span>${isHosting ? ' ⚠' : ''}</span>
+            <button class="proxy-recheck-btn" data-action="check-ip" data-id="${profileId}" title="Re-check IP">↺</button>`;
+          if (!ipRow) {
+            ipRow = document.createElement('div');
+            ipRow.className = 'proxy-ip-row';
+            if (proxyContent) proxyContent.appendChild(ipRow);
+          }
+          if (ipRow) ipRow.innerHTML = flagHtml;
+        } else if (ipRow) {
+          ipRow.remove();
+        }
       }
     }
   }
 
   function closeInlineProxyEditor() {
+    const prevId = inlineProxyEditId;
     inlineProxyEditId = null;
-    // Re-render only proxy cells (no full re-render)
-    profiles.forEach(p => {
-      const cell = document.getElementById(`proxy-cell-${p.id}`);
-      if (cell) cell.innerHTML = renderProxyCell(p, ipCheckResults[p.id]);
-    });
+    if (prevId) {
+      const cell = document.getElementById(`proxy-cell-${prevId}`);
+      const profile = profiles.find(p => p.id === prevId);
+      if (cell && profile) cell.innerHTML = renderProxyCell(profile, ipCheckResults[prevId]);
+    }
   }
 
   async function saveInlineProxy(profileId) {
-    const proxyRaw  = (document.getElementById(`pie-proxy-${profileId}`)?.value || '').trim();
-    const proxyIp   = (document.getElementById(`pie-ip-${profileId}`)?.value || '').trim();
+    const inp = document.getElementById(`proxy-inline-input-${profileId}`);
+    const proxyRaw = inp ? inp.value.trim() : '';
     const proxyServer = normalizeProxy(proxyRaw);
 
     try {
-      const updated = await window.api.profiles.update(profileId, { proxyServer, proxyIp });
+      const updated = await window.api.profiles.update(profileId, { proxyServer });
       const idx = profiles.findIndex(p => p.id === profileId);
       if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
       showToast('Proxy saved.', 'success');
@@ -723,10 +730,9 @@
       if (cell2 && inlineProxyEditId !== profileId && profile2) {
         cell2.innerHTML = renderProxyCell(profile2, ipCheckResults[profileId]);
       }
-      // If inline editor open, refresh autofill
+      // If inline editor open, re-mount the input field
       if (inlineProxyEditId === profileId) {
-        const cell3 = document.getElementById(`proxy-cell-${profileId}`);
-        if (cell3) mountInlineProxyEditor(profileId, cell3);
+        mountInlineProxyInput(profileId);
       }
     }
   }
