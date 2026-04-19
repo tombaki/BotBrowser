@@ -2,7 +2,7 @@
 'use strict';
 
 (function () {
-  // ─── State ──────────────────────────────────────────────────────────────────
+  // ─── State ────────────────────────────────────────────────────────────────────
   let profiles = [];
   let runningSessions = [];
   let currentView = 'profiles';
@@ -16,45 +16,50 @@
   // Kernel manager state
   let kernelReleases = null;
   let kernelInstalled = [];
-  let kernelDownloads = {}; // version -> { progress, status }
+  let kernelDownloads = {};
 
-  // IP check state
-  let ipCheckResults = {}; // profileId -> result
-  let ipCheckLoading = {}; // profileId -> bool
+  // IP check state (profileId -> result)
+  let ipCheckResults = {};
+  let ipCheckLoading = {};
 
-  // Quick proxy popover state
-  let quickProxyProfileId = null;
+  // Inline proxy edit state (profileId being edited)
+  let inlineProxyEditId = null;
 
-  // ─── Icons ──────────────────────────────────────────────────────────────────
+  // Update notification state
+  let updateInfo = null;
+
+  // ─── Icons ────────────────────────────────────────────────────────────────────
   const I = {
-    play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
-    stop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>',
-    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>',
-    edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
-    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
-    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
-    settings: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>',
-    profile: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
-    session: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>',
-    shield: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>',
-    network: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>',
-    cpu: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3H7v2H5v2H3v2h2v2H3v2h2v2H3v2h2v2h2v2h2v-2h2v2h2v-2h2v2h2v-2h2v-2h2v-2h-2v-2h2v-2h-2v-2h2V9h-2V7h-2V5h-2V3h-2v2h-2V3zm0 4h6v6H9V7z"/></svg>',
-    zap: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>',
-    user: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
-    cookie: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10c0-.34-.02-.67-.05-1H21c-.34 0-.67-.01-1-.05V10c-.39-.04-.77-.1-1.15-.18L17 8.07V6.5C17 4.57 15.43 3 13.5 3c-.18 0-.36.01-.53.03C12.68 2.04 12.35 2 12 2z"/></svg>',
-    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>',
-    folder: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>',
-    globe: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
-    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>',
+    play:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+    stop:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>',
+    plus:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>',
+    edit:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+    trash:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
+    copy:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
+    settings: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>',
+    profile:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
+    session:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>',
+    shield:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>',
+    network:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>',
+    cpu:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3H7v2H5v2H3v2h2v2H3v2h2v2H3v2h2v2h2v2h2v-2h2v2h2v-2h2v2h2v-2h2v-2h2v-2h-2v-2h2v-2h-2v-2h2V9h-2V7h-2V5h-2V3h-2v2h-2V3zm0 4h6v6H9V7z"/></svg>',
+    zap:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>',
+    user:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
+    cookie:   '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10c0-.34-.02-.67-.05-1H21c-.34 0-.67-.01-1-.05V10c-.39-.04-.77-.1-1.15-.18L17 8.07V6.5C17 4.57 15.43 3 13.5 3c-.18 0-.36.01-.53.03C12.68 2.04 12.35 2 12 2z"/></svg>',
+    check:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>',
+    folder:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>',
+    globe:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
+    info:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>',
     download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
-    kernel: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>',
-    proxy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
-    android: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.341A5.98 5.98 0 0 0 18 13a5.98 5.98 0 0 0-.477-2.341l2.21-2.21a9.01 9.01 0 0 1 0 9.102l-2.21-2.21zM13 5.523A5.98 5.98 0 0 0 10.659 5l-2.21-2.21a9.01 9.01 0 0 1 9.102 0L15.341 5A5.98 5.98 0 0 0 13 5.523zM8.659 5L6.448 2.79a9.01 9.01 0 0 0-4.239 8.551A9.01 9.01 0 0 0 6.449 19.21L8.659 17A6 6 0 0 1 8 13a6 6 0 0 1 .659-6zM13 20.477A5.98 5.98 0 0 0 15.341 21l2.21 2.21a9.01 9.01 0 0 1-9.102 0L10.659 21A5.98 5.98 0 0 0 13 20.477zM12 9a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>',
-    refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
-    use: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+    kernel:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4 20h16v-2H4v2zm8-18L4 10h4v4h8v-4h4L12 2z"/></svg>',
+    proxy:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
+    android:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C7.08 3.33 6 5.04 6 7h12c0-1.96-1.08-3.67-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>',
+    refresh:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
+    use:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+    bell:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>',
+    close:    '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>',
   };
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────────
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
   function esc(s) { return String(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"'); }
   function el(id) { return document.getElementById(id); }
   function val(id) { const e = el(id); return e ? e.value.trim() : ''; }
@@ -79,7 +84,20 @@
     setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, duration);
   }
 
-  // ─── Init ────────────────────────────────────────────────────────────────────
+  function countryCodeToEmoji(cc) {
+    if (!cc || cc.length !== 2) return '🌐';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)));
+  }
+
+  // Normalize proxy string: if no scheme, default to socks5://
+  function normalizeProxy(s) {
+    if (!s || !s.trim()) return '';
+    s = s.trim();
+    if (!/^[a-z]+:\/\//i.test(s)) return 'socks5://' + s;
+    return s;
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     settings = await window.api.settings.get();
     await loadProfiles();
@@ -87,6 +105,8 @@
     render();
     bindNav();
     bindEvents();
+    // Check for updates in background after 2s
+    setTimeout(checkForUpdates, 2000);
   }
 
   async function loadProfiles() {
@@ -97,7 +117,49 @@
     runningSessions = await window.api.browser.getRunning();
   }
 
-  // ─── Navigation ──────────────────────────────────────────────────────────────
+  async function checkForUpdates() {
+    try {
+      const info = await window.api.app.checkForUpdates();
+      updateInfo = info;
+      if (info.newKernel || info.newControl) {
+        showUpdateBanner(info);
+      }
+    } catch {}
+  }
+
+  function showUpdateBanner(info) {
+    const existing = document.getElementById('update-banner');
+    if (existing) existing.remove();
+
+    const parts = [];
+    if (info.newKernel && info.kernel) {
+      parts.push(`🧠 New BotBrowser kernel: <strong>${esc(info.kernel.tagName)}</strong>`);
+    }
+    if (info.newControl && info.control) {
+      parts.push(`🚀 New Control app: <strong>${esc(info.control.tagName)}</strong>`);
+    }
+    if (!parts.length) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.className = 'update-banner';
+    banner.innerHTML = `
+      <span class="update-banner-icon">${I.bell}</span>
+      <span class="update-banner-text">${parts.join(' &nbsp;·&nbsp; ')}</span>
+      <button class="btn btn-primary btn-sm" onclick="window.api.shell.openPath('https://github.com/tombaki/BotBrowser/releases')">Download</button>
+      <button class="btn btn-ghost btn-sm" onclick="this.closest('#update-banner').remove()">${I.close}</button>
+    `;
+    // Insert after sidebar, before main content
+    const layout = document.querySelector('.app-layout') || document.body;
+    const main = document.getElementById('main-content');
+    if (main && main.parentNode) {
+      main.parentNode.insertBefore(banner, main);
+    } else {
+      layout.prepend(banner);
+    }
+  }
+
+  // ─── Navigation ───────────────────────────────────────────────────────────────
   function bindNav() {
     document.querySelectorAll('[data-nav]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -110,14 +172,16 @@
     window.api.on('action', (action) => { if (action === 'new-profile') openProfileEditor(null); });
   }
 
-  // ─── Event Delegation ────────────────────────────────────────────────────────
+  // ─── Event Delegation ─────────────────────────────────────────────────────────
   function bindEvents() {
     document.addEventListener('click', (e) => {
-      // Close context menus
       if (!e.target.closest('.context-menu')) {
         document.querySelectorAll('.context-menu').forEach(m => m.remove());
       }
-
+      // Close inline proxy editor on outside click
+      if (inlineProxyEditId && !e.target.closest('.proxy-inline-editor') && !e.target.closest('[data-action="open-proxy-editor"]')) {
+        closeInlineProxyEditor();
+      }
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
@@ -186,9 +250,12 @@
       kernelDownloads[version] = { ...(kernelDownloads[version] || {}), progress, status: 'downloading' };
       updateKernelProgressUI(version, progress);
     });
-    window.api.on('kernel:downloadComplete', ({ version }) => {
+    window.api.on('kernel:downloadComplete', ({ version, installStatus, installNote }) => {
       kernelDownloads[version] = { progress: 100, status: 'done' };
-      showToast(`Kernel ${version} downloaded.`, 'success');
+      const msg = installStatus === 'installed' ? `Kernel ${version} installed! ✅` :
+                  installStatus === 'ready'     ? `Kernel ${version} ready to use.` :
+                  `Kernel ${version} downloaded. ${installNote || ''}`;
+      showToast(msg, 'success', 6000);
       window.api.kernel.listInstalled().then(list => {
         kernelInstalled = list;
         if (currentView === 'settings') renderSettings();
@@ -198,38 +265,38 @@
 
   function handleAction(action, data, e) {
     switch (action) {
-      case 'launch-profile':    launchProfile(data.id); break;
-      case 'stop-profile':      stopProfile(data.id); break;
-      case 'stop-all':          stopAll(); break;
-      case 'edit-profile':      openProfileEditor(data.id); break;
-      case 'duplicate-profile': duplicateProfile(data.id); break;
-      case 'delete-profile':    deleteProfile(data.id); break;
-      case 'new-profile':       openProfileEditor(null); break;
-      case 'save-profile':      saveProfile(); break;
-      case 'cancel-edit':       closeProfileEditor(); break;
-      case 'show-context':      showContextMenu(data.id, e); break;
-      case 'delete-selected':   deleteSelected(); break;
-      case 'clear-selection':   clearSelection(); break;
-      case 'browse-file':       browseFile(data.target, data.filter); break;
-      case 'browse-dir':        browseDir(data.target); break;
-      case 'save-settings':     saveSettings(); break;
-      case 'browse-exe':        browseExe(); break;
-      case 'browse-userdata':   browseUserData(); break;
-      case 'tab-switch':        switchTab(data.tab); break;
-      case 'add-header':        addCustomHeader(); break;
-      case 'remove-header':     removeCustomHeader(data.key); break;
+      case 'launch-profile':        launchProfile(data.id); break;
+      case 'stop-profile':          stopProfile(data.id); break;
+      case 'stop-all':              stopAll(); break;
+      case 'edit-profile':          openProfileEditor(data.id); break;
+      case 'duplicate-profile':     duplicateProfile(data.id); break;
+      case 'delete-profile':        deleteProfile(data.id); break;
+      case 'new-profile':           openProfileEditor(null); break;
+      case 'save-profile':          saveProfile(); break;
+      case 'cancel-edit':           closeProfileEditor(); break;
+      case 'show-context':          showContextMenu(data.id, e); break;
+      case 'delete-selected':       deleteSelected(); break;
+      case 'clear-selection':       clearSelection(); break;
+      case 'browse-file':           browseFile(data.target, data.filter); break;
+      case 'browse-dir':            browseDir(data.target); break;
+      case 'save-settings':         saveSettings(); break;
+      case 'browse-exe':            browseExe(); break;
+      case 'browse-userdata':       browseUserData(); break;
+      case 'tab-switch':            switchTab(data.tab); break;
+      case 'add-header':            addCustomHeader(); break;
+      case 'remove-header':         removeCustomHeader(data.key); break;
       // IP check
-      case 'check-ip':          checkProfileIp(data.id); break;
-      // Quick proxy
-      case 'quick-proxy':       openQuickProxy(data.id, e); break;
-      case 'save-quick-proxy':  saveQuickProxy(data.id); break;
-      case 'close-quick-proxy': closeQuickProxy(); break;
+      case 'check-ip':              checkProfileIp(data.id); break;
+      // Inline proxy editor
+      case 'open-proxy-editor':     openInlineProxyEditor(data.id, e); break;
+      case 'save-inline-proxy':     saveInlineProxy(data.id); break;
+      case 'cancel-inline-proxy':   closeInlineProxyEditor(); break;
       // Kernel manager
-      case 'kernel-refresh':    fetchKernelReleases(true); break;
-      case 'kernel-download':   downloadKernel(data.version, data.url, data.filename); break;
-      case 'kernel-delete':     deleteKernel(data.version); break;
-      case 'kernel-use':        useKernelPath(data.execpath); break;
-      case 'kernel-open-dir':   window.api.shell.openPath(data.dir); break;
+      case 'kernel-refresh':        fetchKernelReleases(true); break;
+      case 'kernel-download':       downloadKernel(data.version, data.url, data.filename); break;
+      case 'kernel-delete':         deleteKernel(data.version); break;
+      case 'kernel-use':            useKernelPath(data.execpath); break;
+      case 'kernel-open-dir':       window.api.shell.openPath(data.dir); break;
     }
   }
 
@@ -275,6 +342,7 @@
     }
   }
 
+  // ─── Profile List Rendering ───────────────────────────────────────────────────
   function renderProfiles() {
     const main = el('main-content');
     if (!main) return;
@@ -282,7 +350,6 @@
     const allSelected = visible.length > 0 && visible.every(p => selectedProfileIds.has(p.id));
     const runningSet = new Set(runningSessions.map(s => s.profileId));
 
-    // Brand → avatar gradient + label
     const brandMeta = {
       chrome:   { bg: 'linear-gradient(135deg,#4285f4,#34a853)', label: 'Ch' },
       edge:     { bg: 'linear-gradient(135deg,#0078d4,#00bcf2)', label: 'Ed' },
@@ -293,9 +360,8 @@
       webview:  { bg: 'linear-gradient(135deg,#10b981,#059669)', label: 'Wv' },
     };
 
-    // Update sidebar stats
     const statP = el('stat-profiles'); if (statP) statP.textContent = profiles.length;
-    const statR = el('stat-running'); if (statR) statR.textContent = runningSessions.length;
+    const statR = el('stat-running');  if (statR) statR.textContent = runningSessions.length;
     const statInd = el('stat-indicator'); if (statInd) statInd.classList.toggle('running', runningSessions.length > 0);
     const badgeP = el('badge-profiles'); if (badgeP) badgeP.textContent = profiles.length || '';
     const badgeS = el('badge-sessions'); if (badgeS) { badgeS.textContent = runningSessions.length || ''; badgeS.style.display = runningSessions.length ? '' : 'none'; }
@@ -352,9 +418,11 @@
             const brandKey = (profile.browserBrand || '').toLowerCase();
             const bm = brandMeta[brandKey] || { bg: 'linear-gradient(135deg,#6366f1,#8b5cf6)', label: (profile.name || 'P').charAt(0).toUpperCase() };
             const letter = profile.browserBrand ? bm.label : (profile.name || 'P').charAt(0).toUpperCase();
-            const proxyHost = profile.proxyServer
-              ? profile.proxyServer.replace(/^[a-z]+:\/\/[^@]+@/, '').replace(/^[a-z]+:\/\//, '')
-              : '';
+
+            // Proxy display
+            const ipResult = ipCheckResults[profile.id];
+            const proxyDisplay = renderProxyCell(profile, ipResult);
+
             const brandTagClass = brandKey === 'firefox' ? 'tag-firefox' : 'tag-chrome';
             return `
             <div class="profile-card${isRunning ? ' running' : ''}${isSelected ? ' selected' : ''}" data-profile-id="${profile.id}">
@@ -382,11 +450,8 @@
                   </div>
                 </div>
               </div>
-              <div class="profile-cell">
-                ${proxyHost
-                  ? `<span class="profile-tag tag-proxy" title="${esc(proxyHost)}">${I.globe} ${esc(proxyHost)}</span>`
-                  : `<span style="color:var(--text-3);font-size:11px">—</span>`
-                }
+              <div class="profile-cell proxy-cell" id="proxy-cell-${profile.id}">
+                ${proxyDisplay}
               </div>
               <div class="profile-cell" style="gap:3px;flex-wrap:nowrap">
                 ${profile.browserBrand
@@ -407,27 +472,204 @@
                   ? `<button class="btn btn-danger btn-sm" data-action="stop-profile" data-id="${profile.id}">${I.stop} Stop</button>`
                   : `<button class="btn btn-primary btn-sm" data-action="launch-profile" data-id="${profile.id}">${I.play} Launch</button>`
                 }
-                ${profile.proxyServer ? `<button class="btn btn-secondary btn-sm btn-icon" data-action="quick-proxy" data-id="${profile.id}" title="Change proxy">${I.proxy}</button>` : `<button class="btn btn-ghost btn-sm btn-icon" data-action="quick-proxy" data-id="${profile.id}" title="Set proxy">${I.proxy}</button>`}
-                ${profile.proxyServer ? `<button class="btn btn-secondary btn-sm btn-icon${ipCheckLoading[profile.id] ? ' loading' : ''}" data-action="check-ip" data-id="${profile.id}" title="Check IP">${ipCheckLoading[profile.id] ? '<span class="spin">⟳</span>' : I.globe}</button>` : ''}
                 <button class="btn btn-secondary btn-sm btn-icon" data-action="edit-profile" data-id="${profile.id}" title="Edit">${I.edit}</button>
                 <button class="btn btn-secondary btn-sm btn-icon" data-action="duplicate-profile" data-id="${profile.id}" title="Duplicate">${I.copy}</button>
                 <button class="btn btn-danger btn-sm btn-icon" data-action="delete-profile" data-id="${profile.id}" title="Delete">${I.trash}</button>
                 <button class="btn btn-ghost btn-sm btn-icon" data-action="show-context" data-id="${profile.id}" title="More">⋮</button>
               </div>
-              ${ipCheckResults[profile.id] ? renderIpBadge(profile.id) : ''}
             </div>`;
           }).join('')}
         </div>`}
     `;
+
+    // If inline proxy editor is open for a profile, re-mount it
+    if (inlineProxyEditId) {
+      const cell = document.getElementById(`proxy-cell-${inlineProxyEditId}`);
+      if (cell) mountInlineProxyEditor(inlineProxyEditId, cell);
+    }
   }
 
+  // ─── Proxy Cell Rendering ─────────────────────────────────────────────────────
+  function renderProxyCell(profile, ipResult) {
+    const proxyStr = profile.proxyServer || '';
+    const isLoading = ipCheckLoading[profile.id];
+
+    // Parse scheme for badge color
+    let schemeBadge = '';
+    if (proxyStr) {
+      const m = proxyStr.match(/^([a-z0-9+\-]+):\/\//i);
+      const scheme = m ? m[1].toLowerCase() : 'socks5';
+      const schemeColor = scheme.startsWith('socks5') ? '#9b59b6' :
+                          scheme.startsWith('socks4') ? '#8e44ad' :
+                          scheme.startsWith('http')   ? '#27ae60' : '#7f8c8d';
+      schemeBadge = `<span class="proxy-scheme-badge" style="background:${schemeColor}">${scheme.toUpperCase()}</span>`;
+    }
+
+    // Host:port display (strip scheme+auth)
+    const proxyHost = proxyStr
+      ? proxyStr.replace(/^[a-z+\-]+:\/\/[^@]+@/i, '').replace(/^[a-z+\-]+:\/\//i, '')
+      : '';
+
+    // IP result display
+    let ipDisplay = '';
+    if (isLoading) {
+      ipDisplay = `<span class="proxy-ip-checking">⟳ Checking…</span>`;
+    } else if (ipResult && ipResult.status !== 'fail') {
+      const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '🌐';
+      const country = ipResult.countryCode || '';
+      const isHosting = ipResult.hosting || ipResult.proxy;
+      ipDisplay = `<span class="proxy-ip-result${isHosting ? ' dc' : ''}" title="${esc(ipResult.query + ' · ' + (ipResult.city||'') + ', ' + (ipResult.country||''))}">
+        ${flag} ${esc(ipResult.query || '')} <span class="proxy-country-code">${esc(country)}</span>${isHosting ? ' ⚠' : ''}
+      </span>`;
+    }
+
+    if (!proxyStr) {
+      // No proxy — show clickable "Set proxy" hint
+      return `<span class="proxy-none-btn" data-action="open-proxy-editor" data-id="${profile.id}" title="Set proxy">
+        ${I.proxy} <span style="color:var(--text-3);font-size:11px">Set proxy…</span>
+      </span>`;
+    }
+
+    return `<div class="proxy-cell-content">
+      <div class="proxy-cell-row" data-action="open-proxy-editor" data-id="${profile.id}" title="Click to edit proxy" style="cursor:pointer">
+        ${schemeBadge}
+        <span class="proxy-host-text">${esc(proxyHost)}</span>
+        <span class="proxy-edit-hint">${I.edit}</span>
+      </div>
+      ${ipDisplay ? `<div class="proxy-ip-row">${ipDisplay}
+        <button class="proxy-recheck-btn${isLoading?' loading':''}" data-action="check-ip" data-id="${profile.id}" title="Re-check IP">↺</button>
+      </div>` : `
+        <button class="proxy-check-btn${isLoading?' loading':''}" data-action="check-ip" data-id="${profile.id}" title="Check exit IP">${isLoading ? '⟳' : I.globe} Check IP</button>
+      `}
+    </div>`;
+  }
+
+  // ─── Inline Proxy Editor ──────────────────────────────────────────────────────
+  function openInlineProxyEditor(profileId, e) {
+    if (inlineProxyEditId === profileId) {
+      closeInlineProxyEditor();
+      return;
+    }
+    closeInlineProxyEditor();
+    inlineProxyEditId = profileId;
+    const cell = document.getElementById(`proxy-cell-${profileId}`);
+    if (cell) mountInlineProxyEditor(profileId, cell);
+  }
+
+  function mountInlineProxyEditor(profileId, cell) {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+    const current = profile.proxyServer || '';
+    const currentIp = profile.proxyIp || '';
+    const ipResult = ipCheckResults[profileId];
+    const autoFill = (ipResult && ipResult.query) ? ipResult.query : '';
+
+    cell.innerHTML = `<div class="proxy-inline-editor">
+      <div class="pie-row">
+        <span class="pie-label">Proxy</span>
+        <input class="pie-input" id="pie-proxy-${profileId}" value="${esc(current)}" placeholder="socks5://host:port" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="pie-row">
+        <span class="pie-label">IP</span>
+        <input class="pie-input" id="pie-ip-${profileId}" value="${esc(currentIp)}" placeholder="exit IP override" autocomplete="off">
+        ${autoFill ? `<button class="pie-autofill" onclick="document.getElementById('pie-ip-${profileId}').value='${autoFill}'" title="Use detected IP: ${autoFill}">↑ ${autoFill}</button>` : ''}
+      </div>
+      <div class="pie-actions">
+        <button class="btn btn-secondary btn-sm" data-action="check-ip" data-id="${profileId}">${I.globe} Check IP</button>
+        <button class="btn btn-ghost btn-sm" data-action="cancel-inline-proxy">Cancel</button>
+        <button class="btn btn-primary btn-sm" data-action="save-inline-proxy" data-id="${profileId}">${I.check} Save</button>
+      </div>
+    </div>`;
+
+    // Focus proxy input
+    const inp = document.getElementById(`pie-proxy-${profileId}`);
+    if (inp) { inp.focus(); inp.select(); }
+  }
+
+  function closeInlineProxyEditor() {
+    inlineProxyEditId = null;
+    // Re-render only proxy cells (no full re-render)
+    profiles.forEach(p => {
+      const cell = document.getElementById(`proxy-cell-${p.id}`);
+      if (cell) cell.innerHTML = renderProxyCell(p, ipCheckResults[p.id]);
+    });
+  }
+
+  async function saveInlineProxy(profileId) {
+    const proxyRaw  = (document.getElementById(`pie-proxy-${profileId}`)?.value || '').trim();
+    const proxyIp   = (document.getElementById(`pie-ip-${profileId}`)?.value || '').trim();
+    const proxyServer = normalizeProxy(proxyRaw);
+
+    try {
+      const updated = await window.api.profiles.update(profileId, { proxyServer, proxyIp });
+      const idx = profiles.findIndex(p => p.id === profileId);
+      if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
+      showToast('Proxy saved.', 'success');
+      inlineProxyEditId = null;
+      // Auto-check IP after saving
+      if (proxyServer) {
+        setTimeout(() => checkProfileIp(profileId), 300);
+      }
+      renderProfiles();
+    } catch (err) {
+      showToast(`Failed: ${err.message}`, 'error');
+    }
+  }
+
+  // ─── IP Check ─────────────────────────────────────────────────────────────────
+  async function checkProfileIp(profileId) {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+    if (ipCheckLoading[profileId]) return;
+
+    ipCheckLoading[profileId] = true;
+    // Update just the proxy cell
+    const cell = document.getElementById(`proxy-cell-${profileId}`);
+    if (cell && inlineProxyEditId !== profileId) {
+      cell.innerHTML = renderProxyCell(profile, null);
+    }
+
+    try {
+      const result = await window.api.proxy.checkIp(profile.proxyServer || '');
+      ipCheckResults[profileId] = result;
+      if (result.status === 'fail') {
+        showToast(`IP check failed: ${result.message || 'Unknown error'}`, 'error');
+      } else {
+        const isHosting = result.hosting || result.proxy;
+        const loc = [result.city, result.regionName, result.country].filter(Boolean).join(', ');
+        const flag = countryCodeToEmoji(result.countryCode);
+        showToast(
+          `${flag} ${result.query} · ${loc}${isHosting ? ' · ⚠ Datacenter/Proxy' : ''}`,
+          isHosting ? 'warning' : 'success',
+          6000
+        );
+      }
+    } catch (e) {
+      showToast(`IP check error: ${e.message}`, 'error');
+      ipCheckResults[profileId] = null;
+    } finally {
+      ipCheckLoading[profileId] = false;
+      // Update proxy cell
+      const profile2 = profiles.find(p => p.id === profileId);
+      const cell2 = document.getElementById(`proxy-cell-${profileId}`);
+      if (cell2 && inlineProxyEditId !== profileId && profile2) {
+        cell2.innerHTML = renderProxyCell(profile2, ipCheckResults[profileId]);
+      }
+      // If inline editor open, refresh autofill
+      if (inlineProxyEditId === profileId) {
+        const cell3 = document.getElementById(`proxy-cell-${profileId}`);
+        if (cell3) mountInlineProxyEditor(profileId, cell3);
+      }
+    }
+  }
+
+  // ─── Sessions View ────────────────────────────────────────────────────────────
   function renderSessions() {
     const main = el('main-content');
     if (!main) return;
 
-    // Update sidebar stats
     const statP = el('stat-profiles'); if (statP) statP.textContent = profiles.length;
-    const statR = el('stat-running'); if (statR) statR.textContent = runningSessions.length;
+    const statR = el('stat-running');  if (statR) statR.textContent = runningSessions.length;
     const statInd = el('stat-indicator'); if (statInd) statInd.classList.toggle('running', runningSessions.length > 0);
     const badgeS = el('badge-sessions'); if (badgeS) { badgeS.textContent = runningSessions.length || ''; badgeS.style.display = runningSessions.length ? '' : 'none'; }
 
@@ -463,9 +705,7 @@
                <tbody>
                  ${runningSessions.map(s => `
                  <tr>
-                   <td>
-                     <strong style="color:var(--text-1)">${esc(s.profileName)}</strong>
-                   </td>
+                   <td><strong style="color:var(--text-1)">${esc(s.profileName)}</strong></td>
                    <td><code>${s.pid}</code></td>
                    <td style="color:var(--text-2)">${timeAgo(s.startTime)}</td>
                    <td><span class="url-cell">${esc(s.url || 'about:blank')}</span></td>
@@ -480,12 +720,13 @@
     `;
   }
 
+  // ─── Settings View ────────────────────────────────────────────────────────────
   function renderSettings() {
     const main = el('main-content');
     if (!main) return;
     const s = settings;
     const defaultPath = IS_WIN
-      ? 'C:\Program Files\BotBrowser\chrome.exe'
+      ? 'C:\\Program Files\\BotBrowser\\chrome.exe'
       : IS_MAC ? '/Applications/Chromium.app/Contents/MacOS/Chromium' : '/usr/bin/botbrowser';
 
     main.innerHTML = `
@@ -499,115 +740,115 @@
         </div>
       </div>
 
-      <div class="settings-form">
+      <div class="settings-scroll-wrap">
+        <div class="settings-form">
 
-        <!-- Section: Executable -->
-        <div class="settings-card">
-          <div class="settings-card-header">
-            <div class="settings-card-icon" style="background:rgba(52,152,219,0.1);border-color:rgba(52,152,219,0.2)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#3498db"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          <!-- Executable -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon" style="background:rgba(52,152,219,0.1);border-color:rgba(52,152,219,0.2)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#3498db"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              </div>
+              <div>
+                <div class="settings-card-title">BotBrowser Executable</div>
+                <div class="settings-card-desc">Path to your BotBrowser (Chromium-based) binary</div>
+              </div>
             </div>
-            <div>
-              <div class="settings-card-title">BotBrowser Executable</div>
-              <div class="settings-card-desc">Path to your BotBrowser (Chromium-based) binary</div>
+            <div class="settings-card-body">
+              <div class="form-group full">
+                <label class="form-label">Executable Path</label>
+                <div class="input-with-btn">
+                  <input class="form-input font-mono" id="s-botBrowserPath" value="${esc(s.botBrowserPath || defaultPath)}" placeholder="${esc(defaultPath)}">
+                  <button class="btn btn-secondary btn-sm" data-action="browse-exe">${I.folder} Browse</button>
+                </div>
+                <div class="form-hint">${IS_WIN ? 'e.g. C:\\Program Files\\BotBrowser\\chrome.exe' : IS_MAC ? '/Applications/Chromium.app/Contents/MacOS/Chromium' : '/usr/bin/botbrowser'}</div>
+              </div>
+              <div class="form-group full" style="margin-top:14px">
+                <label class="form-label">Default User Data Directory</label>
+                <div class="input-with-btn">
+                  <input class="form-input font-mono" id="s-defaultUserDataDir" value="${esc(s.defaultUserDataDir || '')}" placeholder="Leave blank to use app data folder">
+                  <button class="btn btn-secondary btn-sm" data-action="browse-userdata">${I.folder} Browse</button>
+                </div>
+                <div class="form-hint">Each profile gets its own sub-folder here.</div>
+              </div>
             </div>
           </div>
-          <div class="settings-card-body">
-            <div class="form-group full">
-              <label class="form-label">Executable Path</label>
-              <div class="input-with-btn">
-                <input class="form-input font-mono" id="s-botBrowserPath" value="${esc(s.botBrowserPath || defaultPath)}" placeholder="${esc(defaultPath)}">
-                <button class="btn btn-secondary btn-sm" data-action="browse-exe">${I.folder} Browse</button>
+
+          <!-- Default Proxy -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon" style="background:rgba(39,174,96,0.1);border-color:rgba(39,174,96,0.2)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#27ae60"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
               </div>
-              <div class="form-hint">${IS_WIN ? 'e.g. C:\Program Files\BotBrowser\chrome.exe' : IS_MAC ? '/Applications/Chromium.app/Contents/MacOS/Chromium' : '/usr/bin/botbrowser'}</div>
+              <div>
+                <div class="settings-card-title">Default Proxy</div>
+                <div class="settings-card-desc">Applied to all new profiles unless overridden</div>
+              </div>
             </div>
-            <div class="form-group full" style="margin-top:14px">
-              <label class="form-label">Default User Data Directory</label>
-              <div class="input-with-btn">
-                <input class="form-input font-mono" id="s-defaultUserDataDir" value="${esc(s.defaultUserDataDir || '')}" placeholder="Leave blank to use app data folder">
-                <button class="btn btn-secondary btn-sm" data-action="browse-userdata">${I.folder} Browse</button>
+            <div class="settings-card-body">
+              <div class="form-group full">
+                <label class="form-label">Proxy Server</label>
+                <input class="form-input" id="s-defaultProxy" value="${esc(s.defaultProxy || '')}" placeholder="socks5://host:port  or  http://user:pass@host:port">
+                <div class="form-hint">Supports HTTP, HTTPS, SOCKS4, SOCKS5. Default scheme: socks5://</div>
               </div>
-              <div class="form-hint">Each profile gets its own sub-folder here. Leave blank for the default app data directory.</div>
             </div>
           </div>
+
+          <!-- Kernel Manager -->
+          <div class="settings-card" id="kernel-manager-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon" style="background:rgba(155,89,182,0.1);border-color:rgba(155,89,182,0.2)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#9b59b6"><path d="M4 20h16v-2H4v2zm8-18L4 10h4v4h8v-4h4L12 2z"/></svg>
+              </div>
+              <div>
+                <div class="settings-card-title">Kernel Manager</div>
+                <div class="settings-card-desc">Download and install BotBrowser kernels from GitHub releases</div>
+              </div>
+              <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+                ${updateInfo && updateInfo.newKernel && updateInfo.kernel
+                  ? `<span class="update-pill">${I.bell} New: ${esc(updateInfo.kernel.tagName)}</span>`
+                  : ''}
+                <button class="btn btn-secondary btn-sm" data-action="kernel-refresh" id="kernel-refresh-btn">${I.refresh} Refresh</button>
+              </div>
+            </div>
+            <div class="settings-card-body">
+              ${renderKernelManager()}
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon" style="background:rgba(52,152,219,0.08);border-color:rgba(52,152,219,0.15)">
+                <img src="../assets/logo.svg" width="18" height="18" style="border-radius:4px;display:block">
+              </div>
+              <div>
+                <div class="settings-card-title">About BotBrowser Control</div>
+                <div class="settings-card-desc">Desktop profile manager for BotBrowser</div>
+              </div>
+              ${updateInfo && updateInfo.newControl && updateInfo.control
+                ? `<span class="update-pill" style="margin-left:auto">${I.bell} v${esc(updateInfo.control.version)} available</span>`
+                : ''}
+            </div>
+            <div class="settings-card-body">
+              <div class="about-grid">
+                <div class="about-item">
+                  <span class="about-item-label">Version</span>
+                  <span class="about-item-value">1.1.0</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-item-label">Platform</span>
+                  <span class="about-item-value">${IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux'}</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-item-label">Support</span>
+                  <span class="about-item-value" style="color:var(--accent)">github.com/botswin/BotBrowser</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
-
-        <!-- Section: Proxy -->
-        <div class="settings-card">
-          <div class="settings-card-header">
-            <div class="settings-card-icon" style="background:rgba(39,174,96,0.1);border-color:rgba(39,174,96,0.2)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#27ae60"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
-            </div>
-            <div>
-              <div class="settings-card-title">Default Proxy</div>
-              <div class="settings-card-desc">Applied to all new profiles unless overridden per-profile</div>
-            </div>
-          </div>
-          <div class="settings-card-body">
-            <div class="form-group full">
-              <label class="form-label">Proxy Server</label>
-              <input class="form-input" id="s-defaultProxy" value="${esc(s.defaultProxy || '')}" placeholder="http://user:pass@host:port  or  socks5://host:port">
-              <div class="form-hint">Supports HTTP, HTTPS, SOCKS4, SOCKS5 with optional credentials.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Section: Kernel Manager -->
-        <div class="settings-card" id="kernel-manager-card">
-          <div class="settings-card-header">
-            <div class="settings-card-icon" style="background:rgba(155,89,182,0.1);border-color:rgba(155,89,182,0.2)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#9b59b6"><path d="M4 20h16v-2H4v2zm8-18L4 10h4v4h8v-4h4L12 2z"/></svg>
-            </div>
-            <div>
-              <div class="settings-card-title">Kernel Manager</div>
-              <div class="settings-card-desc">Download and manage BotBrowser browser kernels from GitHub releases</div>
-            </div>
-            <div style="margin-left:auto">
-              <button class="btn btn-secondary btn-sm" data-action="kernel-refresh" id="kernel-refresh-btn">${I.refresh} Refresh</button>
-            </div>
-          </div>
-          <div class="settings-card-body">
-            ${renderKernelManager()}
-          </div>
-        </div>
-
-        <!-- Section: About -->
-        <div class="settings-card">
-          <div class="settings-card-header">
-            <div class="settings-card-icon" style="background:rgba(52,152,219,0.08);border-color:rgba(52,152,219,0.15)">
-              <img src="../assets/logo.svg" width="18" height="18" style="border-radius:4px;display:block">
-            </div>
-            <div>
-              <div class="settings-card-title">About BotBrowser Control</div>
-              <div class="settings-card-desc">Desktop profile manager for BotBrowser</div>
-            </div>
-          </div>
-          <div class="settings-card-body">
-            <div class="about-grid">
-              <div class="about-item">
-                <span class="about-item-label">Version</span>
-                <span class="about-item-value">1.0.0</span>
-              </div>
-              <div class="about-item">
-                <span class="about-item-label">Platform</span>
-                <span class="about-item-value">${IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux'}</span>
-              </div>
-              <div class="about-item">
-                <span class="about-item-label">CLI Spec</span>
-                <span class="about-item-value">CLI_FLAGS.md</span>
-              </div>
-              <div class="about-item">
-                <span class="about-item-label">Support</span>
-                <span class="about-item-value" style="color:var(--accent)">github.com/botswin/BotBrowser</span>
-              </div>
-            </div>
-            <div class="info-box info" style="margin-top:14px">
-              ${I.info}
-              <div>Supports all <strong>CLI flags</strong> from BotBrowser's CLI_FLAGS.md spec — proxy, fingerprint, locale, timezone, WebRTC, noise seeds, and more.</div>
-            </div>
-          </div>
-        </div>
-
       </div>
     `;
   }
@@ -618,15 +859,14 @@
     const profile = profileId ? profiles.find(p => p.id === profileId) : null;
     const d = profile ? { ...getDefaultProfile(), ...profile } : getDefaultProfile();
 
-    // Tab definitions with icons
     const tabs = [
       { id: 'general',     label: 'General',      icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' },
       { id: 'network',     label: 'Network',      icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>' },
       { id: 'identity',    label: 'Identity',     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>' },
-      { id: 'fingerprint', label: 'Fingerprint',  icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.98 4.04 14 4.03 17.15 6.65c1.5.77 2.76 1.86 3.75 3.25.16.22.11.54-.12.7-.23.16-.54.11-.7-.12-.9-1.26-2.04-2.25-3.39-2.94-2.87-2.43-6.62-2.43-9.49 0-1.36.69-2.5 1.68-3.4 2.94-.1.14-.25.21-.4.21h.1zm6.89 2.1c-.14 0-.27-.06-.37-.16-1.05-1.09-2.76-1.57-4.18-1.19-.29.08-.6-.1-.67-.39-.08-.29.1-.6.39-.67 1.82-.49 3.93.12 5.2 1.49.2.22.19.55-.03.75-.1.1-.23.15-.34.17zm-1.07 7.86c-.08 0-.16-.02-.23-.06-2.24-1.29-3.13-3.67-2.16-5.77.49-1.06 1.35-1.85 2.41-2.23 1.06-.38 2.19-.3 3.16.22 1.01.55 1.77 1.49 2.1 2.62.08.28-.09.57-.37.65-.29.08-.57-.09-.65-.37-.26-.9-.84-1.64-1.64-2.08-.77-.42-1.66-.49-2.49-.17-.84.3-1.5.91-1.87 1.73-.74 1.6-.1 3.43 1.56 4.38.26.15.35.48.2.73-.1.17-.29.26-.5.26h.52zm9.55-1.34c-.18 0-.36-.1-.46-.26-1.16-2.02-.77-4.58.96-6.08.52-.45 1.14-.78 1.81-.97.29-.08.58.09.66.38.08.29-.09.58-.38.66-.51.15-.97.39-1.38.73-1.36 1.18-1.67 3.22-.74 4.84.16.26.07.59-.19.75-.09.05-.19.07-.28.07h0zm-5.62-.42c-.28 0-.52-.19-.57-.47-.08-.44-.11-.88-.1-1.32 0-.29.23-.52.53-.52.29 0 .53.24.52.53-.01.38.02.76.09 1.13.06.29-.13.57-.42.63-.03.01-.06.01-.08.01h.03z"/></svg>' },
+      { id: 'fingerprint', label: 'Fingerprint',  icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28z"/></svg>' },
       { id: 'behavior',    label: 'Behavior',     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>' },
-      { id: 'session',     label: 'Session',      icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10c0-.34-.02-.67-.05-1H21c-.34 0-.67-.01-1-.05V10c-.39-.04-.77-.1-1.15-.18L17 8.07V6.5C17 4.57 15.43 3 13.5 3c-.18 0-.36.01-.53.03C12.68 2.04 12.35 2 12 2z"/></svg>' },
-      { id: 'advanced',    label: 'Advanced',     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>' },
+      { id: 'session',     label: 'Session',      icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>' },
+      { id: 'advanced',    label: 'Advanced',     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z"/></svg>' },
     ];
 
     const overlay = document.createElement('div');
@@ -679,8 +919,6 @@
     `;
     document.body.appendChild(overlay);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeProfileEditor(); });
-
-    // Rebuild custom headers UI
     renderCustomHeadersUI(d.customHeaders || {});
   }
 
@@ -693,7 +931,6 @@
   function switchTab(tab) {
     document.querySelectorAll('.editor-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.editor-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
-    // Scroll panel to top on switch
     const body = document.querySelector('.editor-body');
     if (body) body.scrollTop = 0;
   }
@@ -725,7 +962,7 @@
     };
   }
 
-  // ─── Tab Renderers ─────────────────────────────────────────────────────────────
+  // ─── Tab Renderers ────────────────────────────────────────────────────────────
 
   function badge(tier) {
     if (!tier) return '';
@@ -776,7 +1013,6 @@
               <input class="form-input font-mono" id="f-profileFilePath" placeholder="Select a .enc profile file…" value="${esc(d.profileFilePath||'')}">
               <button class="btn btn-secondary btn-sm" data-action="browse-file" data-target="f-profileFilePath" data-filter="enc">Browse</button>
             </div>
-            <div class="form-hint">BotBrowser .enc profile for fingerprint protection. Highly recommended.</div>
           </div>
           <div class="form-group full">
             <label class="form-label">Profile Directory ${badge('--bot-profile-dir')}</label>
@@ -784,7 +1020,6 @@
               <input class="form-input font-mono" id="f-profileDirPath" placeholder="Directory with multiple .enc files…" value="${esc(d.profileDirPath||'')}">
               <button class="btn btn-secondary btn-sm" data-action="browse-dir" data-target="f-profileDirPath">Browse</button>
             </div>
-            <div class="form-hint">Random profile selected on each startup for fingerprint diversity.</div>
           </div>
         </div>
       </div>
@@ -798,18 +1033,17 @@
         <div class="form-grid">
           <div class="form-group full">
             <label class="form-label">Proxy Server</label>
-            <input class="form-input" id="f-proxyServer" placeholder="http://user:pass@host:port or socks5://..." value="${esc(d.proxyServer||'')}">
-            <div class="form-hint">Supports HTTP, HTTPS, SOCKS5, SOCKS5H with embedded credentials.</div>
+            <input class="form-input" id="f-proxyServer" placeholder="socks5://host:port or http://user:pass@host:port" value="${esc(d.proxyServer||'')}">
+            <div class="form-hint">Default scheme: socks5://. Supports HTTP, HTTPS, SOCKS4, SOCKS5.</div>
           </div>
           <div class="form-group full">
-            <label class="form-label">Proxy IP ${badge('ENT Tier1')} <span class="form-hint-inline">--proxy-ip</span></label>
+            <label class="form-label">Proxy IP ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-proxyIp" placeholder="203.0.113.1" value="${esc(d.proxyIp||'')}">
             <div class="form-hint">Skip per-page IP lookups for better performance.</div>
           </div>
           <div class="form-group full">
-            <label class="form-label">Proxy Bypass Regex ${badge('PRO')} <span class="form-hint-inline">--proxy-bypass-rgx</span></label>
+            <label class="form-label">Proxy Bypass Regex ${badge('PRO')}</label>
             <input class="form-input font-mono" id="f-proxyBypassRgx" placeholder="\\.js($|\\?)" value="${esc(d.proxyBypassRgx||'')}">
-            <div class="form-hint">RE2 regex. Matches hostname + full URL. E.g. <code>\\.(js|css|png)($|\\?)</code> bypasses static assets.</div>
           </div>
         </div>
       </div>
@@ -819,22 +1053,18 @@
           <div class="form-group">
             <label class="form-label">Timezone ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-timezone" placeholder="auto" value="${esc(d.timezone||'auto')}">
-            <div class="form-hint">auto / real / America/New_York</div>
           </div>
           <div class="form-group">
             <label class="form-label">Locale ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-locale" placeholder="auto" value="${esc(d.locale||'auto')}">
-            <div class="form-hint">auto / en-US / fr-FR</div>
           </div>
           <div class="form-group">
             <label class="form-label">Languages ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-languages" placeholder="auto" value="${esc(d.languages||'auto')}">
-            <div class="form-hint">auto / en-US,en / fr-FR,fr</div>
           </div>
           <div class="form-group">
             <label class="form-label">Location ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-location" placeholder="auto" value="${esc(d.location||'auto')}">
-            <div class="form-hint">auto / real / 40.7128,-74.0060</div>
           </div>
         </div>
       </div>
@@ -842,25 +1072,22 @@
         <div class="form-section-title">${I.globe} Custom HTTP Headers ${badge('PRO')}</div>
         <div id="custom-headers-container"></div>
         <button class="btn btn-secondary btn-sm" data-action="add-header" style="margin-top:8px">${I.plus} Add Header</button>
-        <div class="form-hint">Headers are injected into all HTTP/HTTPS requests. Use CDP BotBrowser.setCustomHeaders for runtime changes.</div>
       </div>
       <div class="form-section">
         <div class="form-section-title">${I.network} IP & WebRTC</div>
         <div class="form-grid">
           <div class="form-group full">
-            <label class="form-label">IP Service ${badge('--bot-ip-service')}</label>
+            <label class="form-label">IP Service</label>
             <input class="form-input" id="f-ipService" placeholder="https://ip.example.com" value="${esc(d.ipService||'')}">
-            <div class="form-hint">Custom IP lookup endpoint. Comma-separated for multiple (races them).</div>
           </div>
           <div class="form-group full">
             <label class="form-label">WebRTC ICE Servers ${badge('ENT Tier1')}</label>
             <input class="form-input" id="f-webrtcICE" placeholder="google" value="${esc(d.webrtcICE||'google')}">
-            <div class="form-hint">google / custom:stun:host:port,turn:host:port</div>
           </div>
         </div>
-        ${renderToggle('f-localDns', 'Local DNS Solver', 'Keep DNS resolution local. Prevents DNS leaks.', d.localDns===true, 'ENT Tier1')}
-        ${renderToggle('f-portProtection', 'Port Protection', 'Protect local service ports (VNC, RDP, etc) from being scanned.', d.portProtection===true, 'PRO')}
-        ${renderToggle('f-networkInfoOverride', 'Network Info Override', 'Use profile-defined navigator.connection values (rtt, downlink, effectiveType).', d.networkInfoOverride===true, null)}
+        ${renderToggle('f-localDns', 'Local DNS Solver', 'Prevents DNS leaks.', d.localDns===true, 'ENT Tier1')}
+        ${renderToggle('f-portProtection', 'Port Protection', 'Protect local service ports.', d.portProtection===true, 'PRO')}
+        ${renderToggle('f-networkInfoOverride', 'Network Info Override', 'Use profile navigator.connection values.', d.networkInfoOverride===true, null)}
       </div>
     </div>`;
   }
@@ -871,25 +1098,21 @@
         <div class="form-section-title">${I.shield} Browser Identity ${badge('ENT Tier2')}</div>
         <div class="form-grid">
           <div class="form-group full">
-            <label class="form-label">User Agent String ${badge('--user-agent')}</label>
+            <label class="form-label">User Agent String</label>
             <input class="form-input font-mono" id="f-userAgent" placeholder="Leave blank to use profile default" value="${esc(d.userAgent||'')}">
-            <div class="form-hint">Supports placeholders: {platform}, {platform-version}, {model}, {ua-full-version}, {ua-major-version}, {brand-full-version}, {architecture}, {bitness}</div>
           </div>
           <div class="form-group">
             <label class="form-label">UA Full Version ${badge('ENT Tier2')}</label>
             <input class="form-input" id="f-uaFullVersion" placeholder="138.0.7204.92" value="${esc(d.uaFullVersion||'')}">
-            <div class="form-hint">Must match Chromium major (e.g. for v138, starts with "138.")</div>
           </div>
           <div class="form-group">
             <label class="form-label">Brand Full Version ${badge('ENT Tier2')}</label>
             <input class="form-input" id="f-brandFullVersion" placeholder="142.0.3595.65" value="${esc(d.brandFullVersion||'')}">
-            <div class="form-hint">For Edge/Opera/Brave cadence divergence in UA-CH tuples.</div>
           </div>
         </div>
       </div>
       <div class="form-section">
         <div class="form-section-title">${I.cpu} Custom User-Agent ${badge('ENT Tier3')}</div>
-        <div class="form-hint-banner">Full control over userAgentData. Works together with User Agent String above. BotBrowser auto-generates all Sec-CH-UA-* headers.</div>
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Platform</label>
@@ -942,19 +1165,16 @@
           <div class="form-group">
             <label class="form-label">Window Size</label>
             <input class="form-input" id="f-windowSize" placeholder="real" value="${esc(d.windowSize||'real')}">
-            <div class="form-hint">profile / real / 1920x1080 / JSON</div>
           </div>
           <div class="form-group">
             <label class="form-label">Screen Size</label>
             <input class="form-input" id="f-screenSize" placeholder="real" value="${esc(d.screenSize||'real')}">
-            <div class="form-hint">profile / real / 2560x1440 / JSON</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Orientation ${badge('--bot-config-orientation')}</label>
+            <label class="form-label">Orientation</label>
             <select class="form-select" id="f-orientation">
               ${['profile','landscape','portrait','landscape-primary','landscape-secondary','portrait-primary','portrait-secondary'].map(o=>`<option value="${o}"${d.orientation===o?' selected':''}>${o}</option>`).join('')}
             </select>
-            <div class="form-hint">Desktop profiles ignore this flag.</div>
           </div>
           <div class="form-group">
             <label class="form-label">Keyboard</label>
@@ -967,12 +1187,12 @@
             <label class="form-label">Fonts</label>
             <select class="form-select" id="f-fonts">
               <option value="profile"${d.fonts==='profile'?' selected':''}>Profile (embedded)</option>
-              <option value="expand"${d.fonts==='expand'?' selected':''}>Expand (profile + system)</option>
-              <option value="real"${d.fonts==='real'?' selected':''}>Real (system fonts)</option>
+              <option value="expand"${d.fonts==='expand'?' selected':''}>Expand</option>
+              <option value="real"${d.fonts==='real'?' selected':''}>Real (system)</option>
             </select>
           </div>
         </div>
-        ${renderToggle('f-disableDeviceScaleFactorOnGUI', 'Disable Device Scale Factor', 'Ignore DPI-based UI scaling (disableDeviceScaleFactorOnGUI).', d.disableDeviceScaleFactorOnGUI===true, null)}
+        ${renderToggle('f-disableDeviceScaleFactorOnGUI', 'Disable Device Scale Factor', '', d.disableDeviceScaleFactorOnGUI===true, null)}
       </div>
       <div class="form-section">
         <div class="form-section-title">${I.zap} Rendering & Media</div>
@@ -981,7 +1201,7 @@
             <label class="form-label">WebGL</label>
             <select class="form-select" id="f-webgl">
               <option value="profile"${d.webgl==='profile'?' selected':''}>Profile</option>
-              <option value="real"${d.webgl==='real'?' selected':''}>Real (system)</option>
+              <option value="real"${d.webgl==='real'?' selected':''}>Real</option>
               <option value="disabled"${d.webgl==='disabled'?' selected':''}>Disabled</option>
             </select>
           </div>
@@ -989,7 +1209,7 @@
             <label class="form-label">WebGPU</label>
             <select class="form-select" id="f-webgpu">
               <option value="profile"${d.webgpu==='profile'?' selected':''}>Profile</option>
-              <option value="real"${d.webgpu==='real'?' selected':''}>Real (system)</option>
+              <option value="real"${d.webgpu==='real'?' selected':''}>Real</option>
               <option value="disabled"${d.webgpu==='disabled'?' selected':''}>Disabled</option>
             </select>
           </div>
@@ -997,41 +1217,41 @@
             <label class="form-label">WebRTC</label>
             <select class="form-select" id="f-webrtc">
               <option value="profile"${d.webrtc==='profile'?' selected':''}>Profile</option>
-              <option value="real"${d.webrtc==='real'?' selected':''}>Real (native)</option>
+              <option value="real"${d.webrtc==='real'?' selected':''}>Real</option>
               <option value="disabled"${d.webrtc==='disabled'?' selected':''}>Disabled</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">Media Devices</label>
             <select class="form-select" id="f-mediaDevices">
-              <option value="profile"${d.mediaDevices==='profile'?' selected':''}>Profile (synthetic)</option>
-              <option value="real"${d.mediaDevices==='real'?' selected':''}>Real (system)</option>
+              <option value="profile"${d.mediaDevices==='profile'?' selected':''}>Profile</option>
+              <option value="real"${d.mediaDevices==='real'?' selected':''}>Real</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">Speech Voices</label>
             <select class="form-select" id="f-speechVoices">
-              <option value="profile"${d.speechVoices==='profile'?' selected':''}>Profile (synthetic)</option>
-              <option value="real"${d.speechVoices==='real'?' selected':''}>Real (system)</option>
+              <option value="profile"${d.speechVoices==='profile'?' selected':''}>Profile</option>
+              <option value="real"${d.speechVoices==='real'?' selected':''}>Real</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">Media Types</label>
             <select class="form-select" id="f-mediaTypes">
-              <option value="expand"${d.mediaTypes==='expand'?' selected':''}>Expand (prefer local)</option>
+              <option value="expand"${d.mediaTypes==='expand'?' selected':''}>Expand</option>
               <option value="profile"${d.mediaTypes==='profile'?' selected':''}>Profile</option>
-              <option value="real"${d.mediaTypes==='real'?' selected':''}>Real (system)</option>
+              <option value="real"${d.mediaTypes==='real'?' selected':''}>Real</option>
             </select>
           </div>
         </div>
       </div>
       <div class="form-section">
         <div class="form-section-title">${I.shield} Noise Toggles</div>
-        ${renderToggle('f-noiseCanvas','Canvas Noise','Deterministic variance for Canvas 2D fingerprint protection.',d.noiseCanvas!==false,null)}
-        ${renderToggle('f-noiseWebglImage','WebGL Image Noise','Deterministic variance for WebGL image fingerprint protection.',d.noiseWebglImage!==false,null)}
-        ${renderToggle('f-noiseAudioContext','Audio Context Noise','Deterministic variance for AudioContext fingerprint protection.',d.noiseAudioContext!==false,null)}
-        ${renderToggle('f-noiseClientRects','Client Rects Noise','Variance for getBoundingClientRect/getClientRects.',d.noiseClientRects===true,null)}
-        ${renderToggle('f-noiseTextRects','Text Rects Noise','Deterministic variance for text metrics.',d.noiseTextRects!==false,null)}
+        ${renderToggle('f-noiseCanvas','Canvas Noise','',d.noiseCanvas!==false,null)}
+        ${renderToggle('f-noiseWebglImage','WebGL Image Noise','',d.noiseWebglImage!==false,null)}
+        ${renderToggle('f-noiseAudioContext','Audio Context Noise','',d.noiseAudioContext!==false,null)}
+        ${renderToggle('f-noiseClientRects','Client Rects Noise','',d.noiseClientRects===true,null)}
+        ${renderToggle('f-noiseTextRects','Text Rects Noise','',d.noiseTextRects!==false,null)}
       </div>
     </div>`;
   }
@@ -1040,48 +1260,42 @@
     return `<div class="editor-panel" id="tab-behavior">
       <div class="form-section">
         <div class="form-section-title">${I.shield} Protection Toggles</div>
-        ${renderToggle('f-disableDebugger','Disable Debugger','Ignore JS debugger statements to avoid pauses during automation.',d.disableDebugger!==false,null)}
-        ${renderToggle('f-disableConsoleMessage','Disable Console Messages','Suppress console.* forwarding in CDP logs.',d.disableConsoleMessage!==false,'ENT Tier1')}
-        ${renderToggle('f-alwaysActive','Always Active','Keep windows/tabs active even when unfocused (suppress blur events).',d.alwaysActive!==false,'PRO')}
-        ${renderToggle('f-mobileForceTouch','Mobile Force Touch','Force touch events on/off for mobile device simulation.',d.mobileForceTouch===true,null)}
-        ${renderToggle('f-enableVariationsInContext','X-Client-Data in Incognito','Include X-Client-Data headers in incognito for Google domains.',d.enableVariationsInContext===true,'ENT Tier2')}
+        ${renderToggle('f-disableDebugger','Disable Debugger','Ignore JS debugger statements.',d.disableDebugger!==false,null)}
+        ${renderToggle('f-disableConsoleMessage','Disable Console Messages','',d.disableConsoleMessage!==false,'ENT Tier1')}
+        ${renderToggle('f-alwaysActive','Always Active','Keep windows active even when unfocused.',d.alwaysActive!==false,'PRO')}
+        ${renderToggle('f-mobileForceTouch','Mobile Force Touch','Force touch events for mobile simulation.',d.mobileForceTouch===true,null)}
+        ${renderToggle('f-enableVariationsInContext','X-Client-Data in Incognito','',d.enableVariationsInContext===true,'ENT Tier2')}
       </div>
       <div class="form-section">
         <div class="form-section-title">${I.zap} Timing & Seeds ${badge('ENT Tier2')}</div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">FPS ${badge('ENT Tier2')}</label>
+            <label class="form-label">FPS</label>
             <input class="form-input" id="f-fps" placeholder="profile" value="${esc(d.fps||'profile')}">
-            <div class="form-hint">profile / real / number (e.g. 60)</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Time Scale ${badge('ENT Tier2')}</label>
+            <label class="form-label">Time Scale</label>
             <input class="form-input" id="f-timeScale" type="number" step="0.01" min="0.01" max="0.99" placeholder="0.92" value="${esc(d.timeScale||'')}">
-            <div class="form-hint">Float 0–1. Scales performance.now() intervals.</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Noise Seed ${badge('ENT Tier2')}</label>
+            <label class="form-label">Noise Seed</label>
             <input class="form-input" id="f-noiseSeed" type="number" placeholder="42" value="${esc(d.noiseSeed||'')}">
-            <div class="form-hint">Integer seed for Canvas/WebGL/Audio noise RNG.</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Time Seed ${badge('ENT Tier2')}</label>
+            <label class="form-label">Time Seed</label>
             <input class="form-input" id="f-timeSeed" type="number" placeholder="0" value="${esc(d.timeSeed||'')}">
-            <div class="form-hint">Deterministic timing diversity across 27 browser ops.</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Stack Seed ${badge('ENT Tier2')}</label>
+            <label class="form-label">Stack Seed</label>
             <input class="form-input" id="f-stackSeed" placeholder="profile" value="${esc(d.stackSeed||'profile')}">
-            <div class="form-hint">profile / real / integer seed</div>
           </div>
         </div>
       </div>
       <div class="form-section">
-        <div class="form-section-title">${I.info} History & Session</div>
+        <div class="form-section-title">${I.info} History</div>
         <div class="form-group full">
           <label class="form-label">Inject Random History ${badge('PRO')}</label>
           <input class="form-input" id="f-injectRandomHistory" placeholder="false" value="${esc(d.injectRandomHistory||'')}">
-          <div class="form-hint">true (2–7 entries) / false / number (e.g. 15 → history.length of 16)</div>
         </div>
       </div>
     </div>`;
@@ -1094,7 +1308,6 @@
         <div class="form-group full">
           <label class="form-label">Cookies ${badge('PRO')}</label>
           <textarea class="form-textarea" id="f-cookies" rows="4" placeholder='[{"name":"session","value":"abc","domain":".example.com"}] or @/path/to/cookies.json'>${esc(d.cookies||'')}</textarea>
-          <div class="form-hint">Inline JSON array or @/path/to/file.json. Cookies saved via CDP are auto-loaded.</div>
         </div>
         <div class="form-group full">
           <label class="form-label">Bookmarks</label>
@@ -1107,12 +1320,10 @@
           <div class="form-group">
             <label class="form-label">Mirror Controller Endpoint</label>
             <input class="form-input" id="f-mirrorController" placeholder="host:port" value="${esc(d.mirrorController||'')}">
-            <div class="form-hint">Launch as controller (captures actions)</div>
           </div>
           <div class="form-group">
             <label class="form-label">Mirror Client Endpoint</label>
             <input class="form-input" id="f-mirrorClient" placeholder="host:port" value="${esc(d.mirrorClient||'')}">
-            <div class="form-hint">Launch as client (receives actions)</div>
           </div>
         </div>
       </div>
@@ -1127,31 +1338,29 @@
           <div class="form-group">
             <label class="form-label">Remote Debugging Port</label>
             <input class="form-input" id="f-remoteDebuggingPort" type="number" placeholder="9222" value="${esc(d.remoteDebuggingPort||'')}">
-            <div class="form-hint">Enables CDP. Required for cookie save on stop.</div>
           </div>
           <div class="form-group">
-            <label class="form-label">Bot Script ${badge('--bot-script')}</label>
+            <label class="form-label">Bot Script</label>
             <div class="input-with-btn">
               <input class="form-input font-mono" id="f-botScript" placeholder="/path/to/script.js" value="${esc(d.botScript||'')}">
               <button class="btn btn-secondary btn-sm" data-action="browse-file" data-target="f-botScript" data-filter="js">Browse</button>
             </div>
-            <div class="form-hint">Framework-less CDP script with chrome.debugger API access.</div>
           </div>
         </div>
-        ${renderToggle('f-gpuEmulation', 'GPU Emulation', 'Use system GPU/GL drivers. Set OFF to use your own GPU driver directly.', d.gpuEmulation!==false, 'ENT Tier2')}
+        ${renderToggle('f-gpuEmulation', 'GPU Emulation', '', d.gpuEmulation!==false, 'ENT Tier2')}
       </div>
       <div class="form-section">
-        <div class="form-section-title">${I.zap} Recording (Forensics)</div>
+        <div class="form-section-title">${I.zap} Recording</div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Canvas Record File ${badge('--bot-canvas-record-file')}</label>
+            <label class="form-label">Canvas Record File</label>
             <div class="input-with-btn">
               <input class="form-input font-mono" id="f-canvasRecordFile" placeholder="/tmp/canvaslab.jsonl" value="${esc(d.canvasRecordFile||'')}">
               <button class="btn btn-secondary btn-sm" data-action="browse-file" data-target="f-canvasRecordFile" data-filter="jsonl">Browse</button>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Audio Record File ${badge('--bot-audio-record-file')}</label>
+            <label class="form-label">Audio Record File</label>
             <div class="input-with-btn">
               <input class="form-input font-mono" id="f-audioRecordFile" placeholder="/tmp/audiolab.jsonl" value="${esc(d.audioRecordFile||'')}">
               <button class="btn btn-secondary btn-sm" data-action="browse-file" data-target="f-audioRecordFile" data-filter="jsonl">Browse</button>
@@ -1162,7 +1371,7 @@
     </div>`;
   }
 
-  // ─── Custom Headers UI ─────────────────────────────────────────────────────────
+  // ─── Custom Headers UI ────────────────────────────────────────────────────────
   let customHeadersState = {};
 
   function renderCustomHeadersUI(headers) {
@@ -1211,149 +1420,231 @@
   }
 
   // ─── Profile Actions ──────────────────────────────────────────────────────────
-  // ─── IP Check ─────────────────────────────────────────────────────────────
-  function renderIpBadge(profileId) {
-    const r = ipCheckResults[profileId];
-    if (!r) return '';
-    const isHosting = r.hosting || r.proxy;
-    const flag = r.countryCode ? `<span class="ip-flag">${countryCodeToEmoji(r.countryCode)}</span>` : '';
-    const datacenter = isHosting ? `<span class="ip-badge-dc" title="Datacenter/proxy detected">DC</span>` : '';
-    return `<div class="ip-result-bar" data-profile-id="${profileId}">
-      ${flag}
-      <span class="ip-result-ip">${esc(r.query || '')}</span>
-      <span class="ip-result-loc">${esc([r.city, r.countryCode].filter(Boolean).join(', '))}</span>
-      <span class="ip-result-isp">${esc((r.isp || r.org || '').slice(0, 30))}</span>
-      ${datacenter}
-      <button class="ip-result-close" title="Dismiss" onclick="this.closest('.ip-result-bar').remove()">✕</button>
-    </div>`;
+
+  async function launchProfile(id) {
+    try {
+      await window.api.browser.launch(id);
+    } catch (e) {
+      showToast(`Launch failed: ${e.message}`, 'error', 6000);
+    }
   }
 
-  function countryCodeToEmoji(cc) {
-    if (!cc || cc.length !== 2) return '🌐';
-    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E0 - 65 + c.charCodeAt(0)));
+  async function stopProfile(id) {
+    await window.api.browser.stop(id);
+    await refreshRunningSessions();
+    renderView();
   }
 
-  async function checkProfileIp(profileId) {
-    const profile = profiles.find(p => p.id === profileId);
-    if (!profile) return;
-    if (ipCheckLoading[profileId]) return;
+  async function stopAll() {
+    await window.api.browser.stopAll();
+    await refreshRunningSessions();
+    renderView();
+  }
 
-    ipCheckLoading[profileId] = true;
-    renderProfiles(); // show spinner
+  async function duplicateProfile(id) {
+    try {
+      showToast('Duplicating profile…', 'info', 2000);
+      const copy = await window.api.profiles.duplicate(id);
+      profiles.push(copy);
+      showToast(`Profile "${copy.name}" created.`, 'success');
+      renderView();
+    } catch (e) {
+      showToast(`Duplicate failed: ${e.message}`, 'error');
+    }
+  }
+
+  async function deleteProfile(id) {
+    const p = profiles.find(x => x.id === id);
+    if (!confirm(`Delete profile "${p?.name || id}"? This cannot be undone.`)) return;
+    await window.api.profiles.delete(id);
+    profiles = profiles.filter(x => x.id !== id);
+    selectedProfileIds.delete(id);
+    renderView();
+  }
+
+  async function deleteSelected() {
+    if (selectedProfileIds.size === 0) return;
+    if (!confirm(`Delete ${selectedProfileIds.size} selected profile(s)?`)) return;
+    const ids = [...selectedProfileIds];
+    await window.api.profiles.deleteMultiple(ids);
+    profiles = profiles.filter(p => !selectedProfileIds.has(p.id));
+    selectedProfileIds.clear();
+    showToast(`${ids.length} profile(s) deleted.`, 'success');
+    renderView();
+  }
+
+  function clearSelection() {
+    selectedProfileIds.clear();
+    renderView();
+  }
+
+  async function saveProfile() {
+    const name = val('f-name');
+    if (!name) { showToast('Profile name is required.', 'error'); return; }
+
+    const proxyRaw = val('f-proxyServer');
+    const profileData = {
+      name,
+      browserBrand: val('f-browserBrand') || '',
+      colorScheme: selVal('f-colorScheme'),
+      startUrl: val('f-startUrl'),
+      profileFilePath: val('f-profileFilePath'),
+      profileDirPath: val('f-profileDirPath'),
+      proxyServer: normalizeProxy(proxyRaw),
+      proxyIp: val('f-proxyIp'),
+      proxyBypassRgx: val('f-proxyBypassRgx'),
+      timezone: val('f-timezone') || 'auto',
+      locale: val('f-locale') || 'auto',
+      languages: val('f-languages') || 'auto',
+      location: val('f-location') || 'auto',
+      ipService: val('f-ipService'),
+      webrtcICE: val('f-webrtcICE') || 'google',
+      localDns: chk('f-localDns'),
+      portProtection: chk('f-portProtection'),
+      networkInfoOverride: chk('f-networkInfoOverride'),
+      customHeaders: readCustomHeaders(),
+      userAgent: val('f-userAgent'),
+      uaFullVersion: val('f-uaFullVersion'),
+      brandFullVersion: val('f-brandFullVersion'),
+      platform: selVal('f-platform'),
+      platformVersion: val('f-platformVersion'),
+      model: val('f-model'),
+      architecture: selVal('f-architecture'),
+      bitness: selVal('f-bitness'),
+      mobile: selVal('f-mobile') === '' ? '' : selVal('f-mobile') === 'true',
+      windowSize: val('f-windowSize') || 'real',
+      screenSize: val('f-screenSize') || 'real',
+      orientation: selVal('f-orientation'),
+      keyboard: selVal('f-keyboard'),
+      fonts: selVal('f-fonts'),
+      disableDeviceScaleFactorOnGUI: chk('f-disableDeviceScaleFactorOnGUI'),
+      webgl: selVal('f-webgl'),
+      webgpu: selVal('f-webgpu'),
+      webrtc: selVal('f-webrtc'),
+      mediaDevices: selVal('f-mediaDevices'),
+      speechVoices: selVal('f-speechVoices'),
+      mediaTypes: selVal('f-mediaTypes'),
+      noiseCanvas: chk('f-noiseCanvas'),
+      noiseWebglImage: chk('f-noiseWebglImage'),
+      noiseAudioContext: chk('f-noiseAudioContext'),
+      noiseClientRects: chk('f-noiseClientRects'),
+      noiseTextRects: chk('f-noiseTextRects'),
+      disableDebugger: chk('f-disableDebugger'),
+      disableConsoleMessage: chk('f-disableConsoleMessage'),
+      alwaysActive: chk('f-alwaysActive'),
+      mobileForceTouch: chk('f-mobileForceTouch'),
+      enableVariationsInContext: chk('f-enableVariationsInContext'),
+      fps: val('f-fps') || 'profile',
+      timeScale: val('f-timeScale'),
+      noiseSeed: val('f-noiseSeed'),
+      timeSeed: val('f-timeSeed'),
+      stackSeed: val('f-stackSeed') || 'profile',
+      injectRandomHistory: val('f-injectRandomHistory'),
+      cookies: val('f-cookies'),
+      bookmarks: val('f-bookmarks'),
+      mirrorController: val('f-mirrorController'),
+      mirrorClient: val('f-mirrorClient'),
+      remoteDebuggingPort: val('f-remoteDebuggingPort'),
+      botScript: val('f-botScript'),
+      gpuEmulation: chk('f-gpuEmulation'),
+      canvasRecordFile: val('f-canvasRecordFile'),
+      audioRecordFile: val('f-audioRecordFile'),
+    };
+
+    // Auto-detect Android
+    const isAndroid = profileData.platform === 'Android';
+    const hasMobileModel = profileData.model && /android|samsung|pixel|xiaomi|huawei|oneplus|oppo|vivo|lg|htc|sony|moto/i.test(profileData.model);
+    if (isAndroid || hasMobileModel) {
+      if (profileData.mobile === '' || profileData.mobile === false) profileData.mobile = true;
+      if (profileData.orientation === 'profile' || !profileData.orientation) profileData.orientation = 'portrait';
+      if (!profileData.mobileForceTouch) profileData.mobileForceTouch = true;
+      if (!profileData.architecture) profileData.architecture = 'arm64';
+      if (!profileData.bitness) profileData.bitness = '64';
+      if (!editingProfileId) showToast('Android detected — mobile settings auto-applied.', 'info', 4000);
+    }
 
     try {
-      const result = await window.api.proxy.checkIp(profile.proxyServer || '');
-      ipCheckResults[profileId] = result;
-      if (result.status === 'fail') {
-        showToast(`IP check failed: ${result.message || 'Unknown error'}`, 'error');
+      if (editingProfileId) {
+        const updated = await window.api.profiles.update(editingProfileId, profileData);
+        const idx = profiles.findIndex(p => p.id === editingProfileId);
+        if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
+        showToast('Profile saved.', 'success');
       } else {
-        const isHosting = result.hosting || result.proxy;
-        const loc = [result.city, result.regionName, result.country].filter(Boolean).join(', ');
-        showToast(
-          `${countryCodeToEmoji(result.countryCode)} ${result.query} · ${loc}${isHosting ? ' · ⚠ Datacenter/Proxy' : ''}`,
-          isHosting ? 'warning' : 'success',
-          6000
-        );
+        const created = await window.api.profiles.create(profileData);
+        profiles.push(created);
+        showToast(`Profile "${created.name}" created.`, 'success');
       }
+      closeProfileEditor();
+      renderView();
     } catch (e) {
-      showToast(`IP check error: ${e.message}`, 'error');
-    } finally {
-      ipCheckLoading[profileId] = false;
-      renderProfiles();
+      showToast(`Save failed: ${e.message}`, 'error');
     }
   }
 
-  // ─── Quick Proxy Popover ──────────────────────────────────────────────────
-  function openQuickProxy(profileId, e) {
-    // Remove any existing popover
-    closeQuickProxy();
-    quickProxyProfileId = profileId;
-    const profile = profiles.find(p => p.id === profileId);
-    if (!profile) return;
-
-    const ipResult = ipCheckResults[profileId];
-    const autoFillBtn = (ipResult && ipResult.query)
-      ? `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('qp-proxyip').value='${ipResult.query}'" title="Auto-fill from last IP check">↑ ${ipResult.query}</button>`
-      : '';
-
-    const popover = document.createElement('div');
-    popover.id = 'quick-proxy-popover';
-    popover.className = 'quick-proxy-popover';
-    popover.innerHTML = `
-      <div class="quick-proxy-header">
-        <span>${I.proxy} Quick Proxy</span>
-        <button class="btn btn-ghost btn-sm btn-icon" data-action="close-quick-proxy">✕</button>
-      </div>
-      <div class="quick-proxy-body">
-        <div class="form-group" style="margin-bottom:8px">
-          <label class="form-label" style="font-size:11px;margin-bottom:4px">Proxy Server</label>
-          <input class="form-input form-input-sm" id="qp-proxy" placeholder="http://user:pass@host:port" value="${esc(profile.proxyServer || '')}">
-        </div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label class="form-label" style="font-size:11px;margin-bottom:4px">Proxy IP (exit IP override)</label>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input class="form-input form-input-sm" id="qp-proxyip" placeholder="203.0.113.1" value="${esc(profile.proxyIp || '')}">
-            ${autoFillBtn}
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
-          <button class="btn btn-secondary btn-sm" data-action="check-ip" data-id="${profileId}">${I.globe} Check IP</button>
-          <button class="btn btn-primary btn-sm" data-action="save-quick-proxy" data-id="${profileId}">${I.check} Apply</button>
-        </div>
-      </div>
+  // ─── Context Menu ─────────────────────────────────────────────────────────────
+  function showContextMenu(profileId, e) {
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    const isRunning = runningSessions.some(s => s.profileId === profileId);
+    menu.innerHTML = `
+      <div class="context-menu-item" data-action="${isRunning?'stop-profile':'launch-profile'}" data-id="${profileId}">${isRunning?I.stop+' Stop':I.play+' Launch'}</div>
+      <div class="context-menu-item" data-action="edit-profile" data-id="${profileId}">${I.edit} Edit</div>
+      <div class="context-menu-item" data-action="duplicate-profile" data-id="${profileId}">${I.copy} Duplicate (with session)</div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item danger" data-action="delete-profile" data-id="${profileId}">${I.trash} Delete</div>
     `;
-    document.body.appendChild(popover);
-
-    // Position near the button
-    const btn = e.target.closest('[data-action="quick-proxy"]');
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
-      let left = rect.left;
-      let top = rect.bottom + 6;
-      if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
-      if (top + 220 > window.innerHeight) top = rect.top - 226;
-      popover.style.left = left + 'px';
-      popover.style.top = top + 'px';
-    }
-
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', onOutsideClickQP);
-    }, 10);
+    document.body.appendChild(menu);
+    const rect = e.target.getBoundingClientRect();
+    let x = rect.right, y = rect.bottom;
+    if (x + 200 > window.innerWidth) x = rect.left - 200;
+    if (y + 180 > window.innerHeight) y = rect.top - 180;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
   }
 
-  function onOutsideClickQP(e) {
-    if (!e.target.closest('#quick-proxy-popover') && !e.target.closest('[data-action="quick-proxy"]')) {
-      closeQuickProxy();
-    }
+  // ─── File/Dir Browsing ────────────────────────────────────────────────────────
+  async function browseFile(targetId, filter) {
+    const filters = filter === 'enc' ? [{ name: 'BotBrowser Profile', extensions: ['enc', 'json'] }]
+      : filter === 'js' ? [{ name: 'JavaScript', extensions: ['js'] }]
+      : filter === 'jsonl' ? [{ name: 'JSONL', extensions: ['jsonl', 'json'] }]
+      : [{ name: 'All Files', extensions: ['*'] }];
+    const p = await window.api.dialog.openFile({ filters });
+    if (p) { const inp = el(targetId); if (inp) inp.value = p; }
   }
 
-  function closeQuickProxy() {
-    const pop = document.getElementById('quick-proxy-popover');
-    if (pop) pop.remove();
-    quickProxyProfileId = null;
-    document.removeEventListener('click', onOutsideClickQP);
+  async function browseDir(targetId) {
+    const p = await window.api.dialog.selectDirectory();
+    if (p) { const inp = el(targetId); if (inp) inp.value = p; }
   }
 
-  async function saveQuickProxy(profileId) {
-    const proxyServer = (document.getElementById('qp-proxy')?.value || '').trim();
-    const proxyIp = (document.getElementById('qp-proxyip')?.value || '').trim();
-    try {
-      const updated = await window.api.profiles.update(profileId, { proxyServer, proxyIp });
-      const idx = profiles.findIndex(p => p.id === profileId);
-      if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
-      showToast('Proxy updated.', 'success');
-      closeQuickProxy();
-      renderProfiles();
-    } catch (e) {
-      showToast(`Failed to update proxy: ${e.message}`, 'error');
-    }
+  async function browseExe() {
+    const p = await window.api.dialog.selectExecutable();
+    if (p) { const inp = el('s-botBrowserPath'); if (inp) inp.value = p; }
   }
 
-  // ─── Kernel Manager ───────────────────────────────────────────────────────
+  async function browseUserData() {
+    const p = await window.api.dialog.selectDirectory();
+    if (p) { const inp = el('s-defaultUserDataDir'); if (inp) inp.value = p; }
+  }
+
+  // ─── Settings ─────────────────────────────────────────────────────────────────
+  async function saveSettings() {
+    const proxyRaw = val('s-defaultProxy');
+    const newSettings = {
+      botBrowserPath: val('s-botBrowserPath'),
+      defaultUserDataDir: val('s-defaultUserDataDir'),
+      defaultProxy: normalizeProxy(proxyRaw),
+    };
+    await window.api.settings.set(newSettings);
+    settings = { ...settings, ...newSettings };
+    showToast('Settings saved.', 'success');
+  }
+
+  // ─── Kernel Manager ───────────────────────────────────────────────────────────
   function renderKernelManager() {
     const platform = window.api.platform;
-    const platformAssetExt = platform === 'win32' ? ['.7z', '-win', '.exe'] :
+    const platformAssetExt = platform === 'win32'  ? ['.7z', '-win', '.exe'] :
                               platform === 'darwin' ? ['.dmg', '-mac'] :
                               ['.deb', '.AppImage', '-linux'];
 
@@ -1366,7 +1657,7 @@
     }
 
     if (kernelReleases.length === 0) {
-      return `<div class="kernel-loading"><div style="color:var(--text-3);font-size:13px;padding:8px 0">No releases found.</div></div>`;
+      return `<div class="kernel-loading"><div style="color:var(--text-3);font-size:13px">No releases found.</div></div>`;
     }
 
     const installedVersions = new Set(kernelInstalled.map(k => k.version));
@@ -1381,6 +1672,8 @@
               <div class="kernel-installed-info">
                 <span class="kernel-version-tag installed">${esc(k.version)}</span>
                 <span style="color:var(--text-3);font-size:11px">${k.installedAt ? timeAgo(k.installedAt) : ''}</span>
+                ${k.installStatus ? `<span style="color:var(--success);font-size:11px">${esc(k.installStatus)}</span>` : ''}
+                ${k.installNote ? `<span style="color:var(--text-3);font-size:10px" title="${esc(k.installNote)}">${esc(k.installNote.slice(0,40))}</span>` : ''}
               </div>
               <div style="display:flex;gap:4px">
                 ${k.execPath ? `<button class="btn btn-primary btn-sm" data-action="kernel-use" data-execpath="${esc(k.execPath)}" title="Use as BotBrowser executable">${I.use} Use</button>` : ''}
@@ -1453,15 +1746,20 @@
     const btn = document.getElementById('kernel-refresh-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⟳ Fetching…'; }
     try {
+      // Always refresh available releases; preserve installed list unless we have new data
       const [releases, installed] = await Promise.all([
         window.api.kernel.fetchReleases(),
         window.api.kernel.listInstalled(),
       ]);
       kernelReleases = releases;
-      kernelInstalled = installed;
+      // Merge installed: keep existing entries, add/update from disk
+      const installedMap = {};
+      kernelInstalled.forEach(k => { installedMap[k.version] = k; });
+      installed.forEach(k => { installedMap[k.version] = k; });
+      kernelInstalled = Object.values(installedMap);
     } catch (e) {
       showToast(`Failed to fetch releases: ${e.message}`, 'error', 5000);
-      kernelReleases = [];
+      if (!kernelReleases) kernelReleases = [];
     } finally {
       if (currentView === 'settings') renderSettings();
     }
@@ -1492,7 +1790,7 @@
   }
 
   async function deleteKernel(version) {
-    if (!confirm(`Delete kernel ${version}? This cannot be undone.`)) return;
+    if (!confirm(`Delete kernel ${version}?`)) return;
     await window.api.kernel.delete(version);
     kernelInstalled = kernelInstalled.filter(k => k.version !== version);
     showToast(`Kernel ${version} deleted.`, 'success');
@@ -1505,249 +1803,6 @@
     settings.botBrowserPath = execPath;
     showToast('BotBrowser path updated to this kernel.', 'success');
     if (currentView === 'settings') renderSettings();
-  }
-
-
-  async function launchProfile(id) {
-    try {
-      await window.api.browser.launch(id);
-    } catch (e) {
-      showToast(`Launch failed: ${e.message}`, 'error', 6000);
-    }
-  }
-
-  async function stopProfile(id) {
-    await window.api.browser.stop(id);
-    await refreshRunningSessions();
-    renderView();
-  }
-
-  async function stopAll() {
-    await window.api.browser.stopAll();
-    await refreshRunningSessions();
-    renderView();
-  }
-
-  async function duplicateProfile(id) {
-    try {
-      showToast('Duplicating profile and copying session data…', 'info', 2000);
-      const copy = await window.api.profiles.duplicate(id);
-      profiles.push(copy);
-      showToast(`Profile "${copy.name}" created with session data copied.`, 'success');
-      renderView();
-    } catch (e) {
-      showToast(`Duplicate failed: ${e.message}`, 'error');
-    }
-  }
-
-  async function deleteProfile(id) {
-    const p = profiles.find(x => x.id === id);
-    if (!confirm(`Delete profile "${p?.name || id}"? This cannot be undone.`)) return;
-    await window.api.profiles.delete(id);
-    profiles = profiles.filter(x => x.id !== id);
-    selectedProfileIds.delete(id);
-    renderView();
-  }
-
-  async function deleteSelected() {
-    if (selectedProfileIds.size === 0) return;
-    if (!confirm(`Delete ${selectedProfileIds.size} selected profile(s)? This cannot be undone.`)) return;
-    const ids = [...selectedProfileIds];
-    await window.api.profiles.deleteMultiple(ids);
-    profiles = profiles.filter(p => !selectedProfileIds.has(p.id));
-    selectedProfileIds.clear();
-    showToast(`${ids.length} profile(s) deleted.`, 'success');
-    renderView();
-  }
-
-  function clearSelection() {
-    selectedProfileIds.clear();
-    renderView();
-  }
-
-  async function saveProfile() {
-    const name = val('f-name');
-    if (!name) { showToast('Profile name is required.', 'error'); return; }
-
-    const profileData = {
-      name,
-      browserBrand: val('f-browserBrand') || '',
-      colorScheme: selVal('f-colorScheme'),
-      startUrl: val('f-startUrl'),
-      profileFilePath: val('f-profileFilePath'),
-      profileDirPath: val('f-profileDirPath'),
-
-      // Network
-      proxyServer: val('f-proxyServer'),
-      proxyIp: val('f-proxyIp'),
-      proxyBypassRgx: val('f-proxyBypassRgx'),
-      timezone: val('f-timezone') || 'auto',
-      locale: val('f-locale') || 'auto',
-      languages: val('f-languages') || 'auto',
-      location: val('f-location') || 'auto',
-      ipService: val('f-ipService'),
-      webrtcICE: val('f-webrtcICE') || 'google',
-      localDns: chk('f-localDns'),
-      portProtection: chk('f-portProtection'),
-      networkInfoOverride: chk('f-networkInfoOverride'),
-      customHeaders: readCustomHeaders(),
-
-      // Identity
-      userAgent: val('f-userAgent'),
-      uaFullVersion: val('f-uaFullVersion'),
-      brandFullVersion: val('f-brandFullVersion'),
-      platform: selVal('f-platform'),
-      platformVersion: val('f-platformVersion'),
-      model: val('f-model'),
-      architecture: selVal('f-architecture'),
-      bitness: selVal('f-bitness'),
-      mobile: selVal('f-mobile') === '' ? '' : selVal('f-mobile') === 'true',
-
-      // Fingerprint
-      windowSize: val('f-windowSize') || 'real',
-      screenSize: val('f-screenSize') || 'real',
-      orientation: selVal('f-orientation'),
-      keyboard: selVal('f-keyboard'),
-      fonts: selVal('f-fonts'),
-      disableDeviceScaleFactorOnGUI: chk('f-disableDeviceScaleFactorOnGUI'),
-      webgl: selVal('f-webgl'),
-      webgpu: selVal('f-webgpu'),
-      webrtc: selVal('f-webrtc'),
-      mediaDevices: selVal('f-mediaDevices'),
-      speechVoices: selVal('f-speechVoices'),
-      mediaTypes: selVal('f-mediaTypes'),
-      noiseCanvas: chk('f-noiseCanvas'),
-      noiseWebglImage: chk('f-noiseWebglImage'),
-      noiseAudioContext: chk('f-noiseAudioContext'),
-      noiseClientRects: chk('f-noiseClientRects'),
-      noiseTextRects: chk('f-noiseTextRects'),
-
-      // Behavior
-      disableDebugger: chk('f-disableDebugger'),
-      disableConsoleMessage: chk('f-disableConsoleMessage'),
-      alwaysActive: chk('f-alwaysActive'),
-      mobileForceTouch: chk('f-mobileForceTouch'),
-      enableVariationsInContext: chk('f-enableVariationsInContext'),
-      fps: val('f-fps') || 'profile',
-      timeScale: val('f-timeScale'),
-      noiseSeed: val('f-noiseSeed'),
-      timeSeed: val('f-timeSeed'),
-      stackSeed: val('f-stackSeed') || 'profile',
-      injectRandomHistory: val('f-injectRandomHistory'),
-
-      // Session
-      cookies: val('f-cookies'),
-      bookmarks: val('f-bookmarks'),
-      mirrorController: val('f-mirrorController'),
-      mirrorClient: val('f-mirrorClient'),
-
-      // Advanced
-      remoteDebuggingPort: val('f-remoteDebuggingPort'),
-      botScript: val('f-botScript'),
-      gpuEmulation: chk('f-gpuEmulation'),
-      canvasRecordFile: val('f-canvasRecordFile'),
-      audioRecordFile: val('f-audioRecordFile'),
-    };
-
-    // ── Auto-detect Android profiles ──────────────────────────────────────────
-    // If platform is Android, automatically apply mobile settings
-    const isAndroid = profileData.platform === 'Android';
-    const hasMobileModel = profileData.model && /android|samsung|pixel|xiaomi|huawei|oneplus|oppo|vivo|lg|htc|sony|moto/i.test(profileData.model);
-    if (isAndroid || hasMobileModel) {
-      if (profileData.mobile === '' || profileData.mobile === false) {
-        profileData.mobile = true;
-      }
-      if (profileData.orientation === 'profile' || !profileData.orientation) {
-        profileData.orientation = 'portrait';
-      }
-      if (!profileData.mobileForceTouch) {
-        profileData.mobileForceTouch = true;
-      }
-      if (isAndroid || hasMobileModel) {
-        if (!profileData.architecture) profileData.architecture = 'arm64';
-        if (!profileData.bitness) profileData.bitness = '64';
-      }
-      // Show info toast on first detection
-      if (!editingProfileId) {
-        showToast('Android detected — mobile settings auto-applied.', 'info', 4000);
-      }
-    }
-
-    try {
-      if (editingProfileId) {
-        const updated = await window.api.profiles.update(editingProfileId, profileData);
-        const idx = profiles.findIndex(p => p.id === editingProfileId);
-        if (idx !== -1) profiles[idx] = { ...profiles[idx], ...updated };
-        showToast('Profile saved.', 'success');
-      } else {
-        const created = await window.api.profiles.create(profileData);
-        profiles.push(created);
-        showToast(`Profile "${created.name}" created.`, 'success');
-      }
-      closeProfileEditor();
-      renderView();
-    } catch (e) {
-      showToast(`Save failed: ${e.message}`, 'error');
-    }
-  }
-
-  // ─── Context Menu ──────────────────────────────────────────────────────────────
-  function showContextMenu(profileId, e) {
-    document.querySelectorAll('.context-menu').forEach(m => m.remove());
-    const menu = document.createElement('div');
-    menu.className = 'context-menu';
-    const isRunning = runningSessions.some(s => s.profileId === profileId);
-    menu.innerHTML = `
-      <div class="context-menu-item" data-action="${isRunning?'stop-profile':'launch-profile'}" data-id="${profileId}">${isRunning?I.stop+' Stop':I.play+' Launch'}</div>
-      <div class="context-menu-item" data-action="edit-profile" data-id="${profileId}">${I.edit} Edit</div>
-      <div class="context-menu-item" data-action="duplicate-profile" data-id="${profileId}">${I.copy} Duplicate (with session)</div>
-      <div class="context-menu-divider"></div>
-      <div class="context-menu-item danger" data-action="delete-profile" data-id="${profileId}">${I.trash} Delete</div>
-    `;
-    document.body.appendChild(menu);
-    const rect = e.target.getBoundingClientRect();
-    let x = rect.right, y = rect.bottom;
-    if (x + 200 > window.innerWidth) x = rect.left - 200;
-    if (y + 180 > window.innerHeight) y = rect.top - 180;
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-  }
-
-  // ─── File/Dir Browsing ─────────────────────────────────────────────────────────
-  async function browseFile(targetId, filter) {
-    const filters = filter === 'enc' ? [{ name: 'BotBrowser Profile', extensions: ['enc', 'json'] }]
-      : filter === 'js' ? [{ name: 'JavaScript', extensions: ['js'] }]
-      : filter === 'jsonl' ? [{ name: 'JSONL', extensions: ['jsonl', 'json'] }]
-      : [{ name: 'All Files', extensions: ['*'] }];
-    const p = await window.api.dialog.openFile({ filters });
-    if (p) { const inp = el(targetId); if (inp) inp.value = p; }
-  }
-
-  async function browseDir(targetId) {
-    const p = await window.api.dialog.selectDirectory();
-    if (p) { const inp = el(targetId); if (inp) inp.value = p; }
-  }
-
-  async function browseExe() {
-    const p = await window.api.dialog.selectExecutable();
-    if (p) { const inp = el('s-botBrowserPath'); if (inp) inp.value = p; }
-  }
-
-  async function browseUserData() {
-    const p = await window.api.dialog.selectDirectory();
-    if (p) { const inp = el('s-defaultUserDataDir'); if (inp) inp.value = p; }
-  }
-
-  // ─── Settings ──────────────────────────────────────────────────────────────────
-  async function saveSettings() {
-    const newSettings = {
-      botBrowserPath: val('s-botBrowserPath'),
-      defaultUserDataDir: val('s-defaultUserDataDir'),
-      defaultProxy: val('s-defaultProxy'),
-    };
-    await window.api.settings.set(newSettings);
-    settings = { ...settings, ...newSettings };
-    showToast('Settings saved.', 'success');
   }
 
   // ─── Bootstrap ────────────────────────────────────────────────────────────────

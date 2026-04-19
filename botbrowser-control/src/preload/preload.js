@@ -1,6 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose secure API to renderer
 contextBridge.exposeInMainWorld('api', {
   // Profiles
   profiles: {
@@ -54,6 +53,11 @@ contextBridge.exposeInMainWorld('api', {
     download: (opts) => ipcRenderer.invoke('kernel:download', opts),
   },
 
+  // App / Update checker
+  app: {
+    checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+  },
+
   // Platform info
   platform: process.platform,
 
@@ -64,6 +68,7 @@ contextBridge.exposeInMainWorld('api', {
       'instance:started', 'instance:stopped', 'instance:error',
       'profile:statusChanged', 'profile:cookiesSaved',
       'kernel:downloadProgress', 'kernel:downloadComplete', 'kernel:downloadError',
+      'app:updateAvailable',
     ];
     if (validChannels.includes(channel)) {
       const sub = (_, ...args) => callback(...args);

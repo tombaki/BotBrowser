@@ -1,24 +1,26 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const net = require('net');
+const { spawn, execFile } = require('child_process');
 const https = require('https');
 const http = require('http');
 const Store = require('electron-store');
 const { v4: uuidv4 } = require('uuid');
 
-// ─── Fix app name BEFORE anything else (prevents "Electron" in menu/title bar) ───
+// ─── Fix app name BEFORE anything else ───
 app.setName('BotBrowser Control');
 
-// ─── Platform-aware defaults ───────────────────────────────────────────────────
+// ─── Platform-aware defaults ──────────────────────────────────────────────────
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
+const IS_LINUX = process.platform === 'linux';
 
 function getDefaultBotBrowserPath() {
   if (IS_MAC) return '/Applications/Chromium.app/Contents/MacOS/Chromium';
   if (IS_WIN) return 'C:\\Program Files\\BotBrowser\\chrome.exe';
-  return '/usr/bin/botbrowser'; // Linux
+  return '/usr/bin/botbrowser';
 }
 
 function getDefaultUserDataDir() {
@@ -27,7 +29,7 @@ function getDefaultUserDataDir() {
 
 const DEFAULT_BOTBROWSER_PATH = getDefaultBotBrowserPath();
 
-// ─── Persistent store ──────────────────────────────────────────────────────────
+// ─── Persistent store ─────────────────────────────────────────────────────────
 const store = new Store({
   name: 'botbrowser-control',
   defaults: {
@@ -39,16 +41,18 @@ const store = new Store({
       defaultProxy: '',
       autoLaunch: false,
     },
-    windowBounds: { width: 1280, height: 800 }
+    windowBounds: { width: 1280, height: 800 },
+    lastSeenKernelRelease: null,
+    lastSeenControlRelease: null,
   }
 });
 
-// ─── Runtime state ─────────────────────────────────────────────────────────────
-const runningInstances = new Map(); // profileId -> instance object
-const tempFiles = new Map();        // profileId -> tempFilePath
+// ─── Runtime state ────────────────────────────────────────────────────────────
+const runningInstances = new Map();
+const tempFiles = new Map();
 let mainWindow = null;
 
-// ─── Window ────────────────────────────────────────────────────────────────────
+// ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
   const bounds = store.get('windowBounds');
 
@@ -71,10 +75,16 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      devTools: false,  // disable devtools
     }
   });
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+  // Prevent devtools from opening
+  mainWindow.webContents.on('devtools-opened', () => {
+    mainWindow.webContents.closeDevTools();
+  });
 
   mainWindow.on('resize', () => {
     const [width, height] = mainWindow.getSize();
@@ -111,6 +121,18 @@ function buildMenu() {
       ]
     },
     {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ]
+    },
+    {
       label: 'View',
       submenu: [
         { label: 'Profiles', accelerator: IS_MAC ? 'Cmd+1' : 'Ctrl+1', click: () => mainWindow?.webContents.send('navigate', 'profiles') },
@@ -118,7 +140,6 @@ function buildMenu() {
         { label: 'Settings', accelerator: IS_MAC ? 'Cmd+3' : 'Ctrl+3', click: () => mainWindow?.webContents.send('navigate', 'settings') },
         { type: 'separator' },
         { role: 'reload' },
-        { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
@@ -135,7 +156,7 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// ─── IPC: Profile Management ───────────────────────────────────────────────────
+// ─── IPC: Profile Management ──────────────────────────────────────────────────
 
 ipcMain.handle('profiles:getAll', () => store.get('profiles', []));
 
@@ -203,7 +224,6 @@ ipcMain.handle('profiles:duplicate', async (_, id) => {
     savedCookiesPath: null,
   };
 
-  // Copy user-data-dir (cookies, history, session data, open tabs)
   const settings = store.get('settings');
   const srcDir = path.join(settings.defaultUserDataDir, id);
   const dstDir = path.join(settings.defaultUserDataDir, newId);
@@ -211,20 +231,16 @@ ipcMain.handle('profiles:duplicate', async (_, id) => {
   if (fs.existsSync(srcDir)) {
     try {
       copyDirRecursive(srcDir, dstDir);
-
-      // Update savedCookiesPath to point to new location
       const newCookiesPath = path.join(dstDir, 'saved-cookies.json');
       if (fs.existsSync(newCookiesPath)) {
         copy.savedCookiesPath = newCookiesPath;
-        // Count cookies
         try {
           const cookies = JSON.parse(fs.readFileSync(newCookiesPath, 'utf8'));
           copy.cookieCount = Array.isArray(cookies) ? cookies.length : 0;
           copy.cookiesSavedAt = original.cookiesSavedAt;
         } catch {}
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   profiles.push(copy);
@@ -232,7 +248,6 @@ ipcMain.handle('profiles:duplicate', async (_, id) => {
   return copy;
 });
 
-/** Recursively copy a directory */
 function copyDirRecursive(src, dst) {
   fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -246,20 +261,17 @@ function copyDirRecursive(src, dst) {
   }
 }
 
-// ─── IPC: Browser Launch ───────────────────────────────────────────────────────
+// ─── IPC: Browser Launch ──────────────────────────────────────────────────────
 
 ipcMain.handle('browser:launch', async (_, profileId) => {
   let profiles = store.get('profiles', []);
   let profile = profiles.find(p => p.id === profileId);
   if (!profile) throw new Error('Profile not found');
 
-  // Guard: if already tracked as running, don't spawn a duplicate
   if (runningInstances.has(profileId)) {
     throw new Error('Profile is already running.');
   }
 
-  // Ghost recovery: profile was marked running (from a previous force-close)
-  // but has no live process — reset it before launching fresh
   if (profile.status === 'running') {
     updateProfileStatus(profileId, 'stopped');
     profile = { ...profile, status: 'stopped' };
@@ -274,22 +286,19 @@ ipcMain.handle('browser:launch', async (_, profileId) => {
     );
   }
 
-  // Build unique user-data-dir per profile
   const userDataDir = path.join(settings.defaultUserDataDir, profileId);
   fs.mkdirSync(userDataDir, { recursive: true });
 
-  // Auto-load previously saved cookies
   const savedCookiesPath = path.join(userDataDir, 'saved-cookies.json');
   if (fs.existsSync(savedCookiesPath) && !profile.cookies) {
     profile = { ...profile, cookies: `@${savedCookiesPath}` };
   }
 
-  // Resolve --bot-profile argument
   let botProfileArg = '';
   if (profile.profileFilePath && fs.existsSync(profile.profileFilePath)) {
     botProfileArg = injectConfigsIntoEncFile(profile.profileFilePath, profile, profileId);
   } else if (profile.profileDirPath && fs.existsSync(profile.profileDirPath)) {
-    botProfileArg = null; // use --bot-profile-dir instead
+    botProfileArg = null;
   } else {
     botProfileArg = writeStandaloneConfigFile(profile, profileId);
   }
@@ -302,7 +311,6 @@ ipcMain.handle('browser:launch', async (_, profileId) => {
     ...(IS_WIN ? { shell: false } : {})
   });
 
-  // Pick up --remote-debugging-port from args
   const rdpArg = args.find(a => a.startsWith('--remote-debugging-port='));
   const remoteDebuggingPort = rdpArg ? parseInt(rdpArg.split('=')[1], 10) : null;
 
@@ -343,20 +351,16 @@ ipcMain.handle('browser:launch', async (_, profileId) => {
 });
 
 ipcMain.handle('browser:stop', async (_, profileId) => {
-  // Ghost profile — not tracked in memory (e.g. after force-close + relaunch)
-  // Still force status to stopped so the UI unlocks.
   if (!runningInstances.has(profileId)) {
     updateProfileStatus(profileId, 'stopped');
     return false;
   }
   const inst = runningInstances.get(profileId);
 
-  // Save cookies via CDP before killing
   if (inst.remoteDebuggingPort) {
     try {
       await saveCookiesViaCDP(profileId, inst.remoteDebuggingPort, inst.userDataDir);
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   try { inst.process.kill(IS_WIN ? undefined : 'SIGTERM'); } catch {}
@@ -401,7 +405,7 @@ ipcMain.handle('browser:getRunning', () => {
   return result;
 });
 
-// ─── IPC: Settings ─────────────────────────────────────────────────────────────
+// ─── IPC: Settings ────────────────────────────────────────────────────────────
 
 ipcMain.handle('settings:get', () => store.get('settings'));
 ipcMain.handle('settings:set', (_, newSettings) => {
@@ -409,7 +413,7 @@ ipcMain.handle('settings:set', (_, newSettings) => {
   return true;
 });
 
-// ─── IPC: Dialogs ──────────────────────────────────────────────────────────────
+// ─── IPC: Dialogs ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('dialog:openFile', async (_, options = {}) => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -446,122 +450,278 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p));
 ipcMain.handle('shell:showItemInFolder', (_, p) => shell.showItemInFolder(p));
 
-// ─── IPC: Proxy / IP Check ───────────────────────────────────────────────────
+// ─── IPC: Proxy / IP Check ────────────────────────────────────────────────────
 
 /**
- * Check proxy exit IP via ip-api.com (JSON endpoint).
- * proxyServer is optional – if provided the request is tunnelled through it.
- * Returns the full ip-api.com JSON response object.
+ * Parse a proxy URL string into { protocol, host, port, username, password }
  */
-ipcMain.handle('proxy:checkIp', async (_, proxyServer) => {
+function parseProxy(proxyStr) {
+  if (!proxyStr || !proxyStr.trim()) return null;
+  let s = proxyStr.trim();
+  if (!/^[a-z]+:\/\//i.test(s)) s = 'socks5://' + s;
+  try {
+    const u = new URL(s);
+    return {
+      protocol: u.protocol.replace(':', ''),
+      host: u.hostname,
+      port: parseInt(u.port) || (u.protocol.startsWith('http') ? 8080 : 1080),
+      username: decodeURIComponent(u.username || ''),
+      password: decodeURIComponent(u.password || ''),
+    };
+  } catch { return null; }
+}
+
+/**
+ * Connect through SOCKS5 proxy using raw TCP (no external deps).
+ * Returns a socket connected to targetHost:targetPort via the proxy.
+ */
+function connectViaSocks5(proxyHost, proxyPort, targetHost, targetPort, username, password) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('IP check timed out')), 15000);
+    const sock = net.connect(proxyPort, proxyHost, () => {
+      // SOCKS5 greeting
+      const authMethods = (username && password) ? [0x00, 0x02] : [0x00];
+      const greeting = Buffer.from([0x05, authMethods.length, ...authMethods]);
+      sock.write(greeting);
+    });
 
-    // ip-api.com fields: status, country, countryCode, region, regionName,
-    //                    city, zip, lat, lon, timezone, isp, org, as, hosting, query
-    const apiUrl = 'http://ip-api.com/json/?fields=66846719';
+    sock.setTimeout(15000);
+    sock.on('timeout', () => { sock.destroy(); reject(new Error('SOCKS5 connect timeout')); });
+    sock.on('error', reject);
 
-    function doRequest(url, proxyOpts) {
-      const urlObj = new URL(url);
-      const options = {
-        hostname: proxyOpts ? proxyOpts.hostname : urlObj.hostname,
-        port:     proxyOpts ? proxyOpts.port     : (urlObj.port || 80),
-        path:     proxyOpts ? url                : urlObj.pathname + urlObj.search,
-        method:   proxyOpts ? 'CONNECT'          : 'GET',
-        headers:  { 'User-Agent': 'BotBrowserControl/1.0' }
-      };
+    let state = 'greeting';
+    let buf = Buffer.alloc(0);
 
-      if (!proxyOpts) {
-        // Direct request
-        const req = http.request(options, (res) => {
-          let data = '';
-          res.on('data', d => { data += d; });
-          res.on('end', () => {
-            clearTimeout(timeout);
-            try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('Invalid JSON response')); }
-          });
-        });
-        req.on('error', e => { clearTimeout(timeout); reject(e); });
-        req.setTimeout(12000, () => { req.destroy(); clearTimeout(timeout); reject(new Error('Request timeout')); });
-        req.end();
+    sock.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+
+      if (state === 'greeting') {
+        if (buf.length < 2) return;
+        if (buf[0] !== 0x05) { sock.destroy(); reject(new Error('Not a SOCKS5 server')); return; }
+        const method = buf[1];
+        buf = buf.slice(2);
+
+        if (method === 0xFF) { sock.destroy(); reject(new Error('SOCKS5: no acceptable auth method')); return; }
+
+        if (method === 0x02) {
+          // Username/password auth
+          state = 'auth';
+          const uBuf = Buffer.from(username || '', 'utf8');
+          const pBuf = Buffer.from(password || '', 'utf8');
+          const authPkt = Buffer.from([0x01, uBuf.length, ...uBuf, pBuf.length, ...pBuf]);
+          sock.write(authPkt);
+        } else {
+          // No auth — send CONNECT
+          state = 'connect';
+          sendSocks5Connect(sock, targetHost, targetPort);
+        }
         return;
       }
 
-      // HTTP CONNECT tunnel through proxy
-      const connectReq = http.request(options, (res) => {
-        clearTimeout(timeout);
-        reject(new Error(`Proxy CONNECT failed: ${res.statusCode}`));
-      });
-      connectReq.on('connect', (res, socket) => {
-        if (res.statusCode !== 200) {
-          socket.destroy();
-          clearTimeout(timeout);
-          reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
+      if (state === 'auth') {
+        if (buf.length < 2) return;
+        if (buf[1] !== 0x00) { sock.destroy(); reject(new Error('SOCKS5 auth failed')); return; }
+        buf = buf.slice(2);
+        state = 'connect';
+        sendSocks5Connect(sock, targetHost, targetPort);
+        return;
+      }
+
+      if (state === 'connect') {
+        if (buf.length < 10) return;  // minimum response
+        if (buf[0] !== 0x05 || buf[1] !== 0x00) {
+          const errCodes = { 1: 'General failure', 2: 'Connection not allowed', 3: 'Network unreachable', 4: 'Host unreachable', 5: 'Connection refused' };
+          sock.destroy();
+          reject(new Error('SOCKS5 connect error: ' + (errCodes[buf[1]] || `code ${buf[1]}`)));
           return;
         }
-        const targetOptions = {
-          hostname: urlObj.hostname,
-          port: urlObj.port || 80,
-          path: urlObj.pathname + urlObj.search,
-          method: 'GET',
-          headers: { 'User-Agent': 'BotBrowserControl/1.0', 'Host': urlObj.hostname },
-          createConnection: () => socket,
-        };
-        const tunnelReq = http.request(targetOptions, (tunnelRes) => {
-          let data = '';
-          tunnelRes.on('data', d => { data += d; });
-          tunnelRes.on('end', () => {
-            clearTimeout(timeout);
-            try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('Invalid JSON response')); }
-          });
-        });
-        tunnelReq.on('error', e => { clearTimeout(timeout); reject(e); });
-        tunnelReq.end();
-      });
-      connectReq.on('error', e => { clearTimeout(timeout); reject(e); });
-      connectReq.setTimeout(12000, () => { connectReq.destroy(); clearTimeout(timeout); reject(new Error('Proxy connect timeout')); });
-      connectReq.end();
-    }
-
-    if (!proxyServer || !proxyServer.trim()) {
-      doRequest(apiUrl, null);
-      return;
-    }
-
-    // Parse proxy URL
-    try {
-      let proxyUrl = proxyServer.trim();
-      if (!/^[a-z]+:\/\//i.test(proxyUrl)) proxyUrl = 'http://' + proxyUrl;
-      const parsed = new URL(proxyUrl);
-      const isSocks = parsed.protocol.startsWith('socks');
-      if (isSocks) {
-        // SOCKS proxies need a different approach; fall back to direct for IP check
-        // but still use ip-api.com without proxy (show actual outbound IP)
-        doRequest(apiUrl, null);
-        return;
+        // Success — socket is now connected to target
+        state = 'done';
+        sock.removeAllListeners('data');
+        resolve({ socket: sock, remaining: buf.slice(10) });
       }
-      const target = new URL(apiUrl);
-      const connectHost = `${target.hostname}:${target.port || 80}`;
-      const proxyOpts = {
-        hostname: parsed.hostname,
-        port: parseInt(parsed.port) || 8080,
-        path: connectHost,
-        auth: (parsed.username && parsed.password) ? `${parsed.username}:${parsed.password}` : undefined,
-      };
-      if (proxyOpts.auth) {
-        proxyOpts.headers = {
-          'Proxy-Authorization': 'Basic ' + Buffer.from(proxyOpts.auth).toString('base64')
-        };
-      }
-      doRequest(apiUrl, proxyOpts);
-    } catch (e) {
-      clearTimeout(timeout);
-      reject(new Error(`Invalid proxy URL: ${e.message}`));
-    }
+    });
   });
+}
+
+function sendSocks5Connect(sock, host, port) {
+  const hostBuf = Buffer.from(host, 'utf8');
+  const pkt = Buffer.from([
+    0x05, 0x01, 0x00, 0x03,
+    hostBuf.length, ...hostBuf,
+    (port >> 8) & 0xFF, port & 0xFF
+  ]);
+  sock.write(pkt);
+}
+
+/**
+ * Do an HTTP GET through a raw socket (used after SOCKS5 tunnel is established).
+ */
+function httpGetThroughSocket(socket, host, path, remainingData) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    const req = `GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\nUser-Agent: BotBrowserControl/1.0\r\n\r\n`;
+    socket.write(req);
+    if (remainingData && remainingData.length > 0) {
+      data += remainingData.toString();
+    }
+    socket.on('data', (chunk) => { data += chunk.toString(); });
+    socket.on('end', () => {
+      const bodyStart = data.indexOf('\r\n\r\n');
+      const body = bodyStart !== -1 ? data.slice(bodyStart + 4) : data;
+      try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON response from ip-api.com')); }
+    });
+    socket.on('error', reject);
+  });
+}
+
+/**
+ * Check proxy exit IP via ip-api.com.
+ * Supports HTTP, HTTPS (CONNECT tunnel), SOCKS4, SOCKS5.
+ */
+ipcMain.handle('proxy:checkIp', async (_, proxyServer) => {
+  const API_HOST = 'ip-api.com';
+  const API_PATH = '/json/?fields=66846719';
+  const API_PORT = 80;
+
+  // No proxy — direct request
+  if (!proxyServer || !proxyServer.trim()) {
+    return doDirectHttpGet(`http://${API_HOST}${API_PATH}`);
+  }
+
+  const proxy = parseProxy(proxyServer);
+  if (!proxy) throw new Error('Invalid proxy URL');
+
+  const proto = proxy.protocol.toLowerCase();
+
+  // SOCKS5 / SOCKS5H
+  if (proto === 'socks5' || proto === 'socks5h' || proto === 'socks4' || proto === 'socks4a') {
+    const { socket, remaining } = await connectViaSocks5(
+      proxy.host, proxy.port, API_HOST, API_PORT,
+      proxy.username, proxy.password
+    );
+    return httpGetThroughSocket(socket, API_HOST, API_PATH, remaining);
+  }
+
+  // HTTP / HTTPS proxy — use CONNECT tunnel
+  return doHttpProxyIpCheck(proxy, API_HOST, API_PATH, API_PORT);
 });
 
-// ─── IPC: Kernel Manager ─────────────────────────────────────────────────────
+function doDirectHttpGet(url) {
+  return new Promise((resolve, reject) => {
+    const to = setTimeout(() => reject(new Error('Request timeout')), 15000);
+    const req = http.get(url, { headers: { 'User-Agent': 'BotBrowserControl/1.0' } }, (res) => {
+      let data = '';
+      res.on('data', d => { data += d; });
+      res.on('end', () => {
+        clearTimeout(to);
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON')); }
+      });
+    });
+    req.on('error', e => { clearTimeout(to); reject(e); });
+    req.setTimeout(12000, () => { req.destroy(); clearTimeout(to); reject(new Error('Timeout')); });
+  });
+}
+
+function doHttpProxyIpCheck(proxy, targetHost, targetPath, targetPort) {
+  return new Promise((resolve, reject) => {
+    const to = setTimeout(() => reject(new Error('Proxy timeout')), 15000);
+
+    const connectTarget = `${targetHost}:${targetPort}`;
+    const headers = { 'User-Agent': 'BotBrowserControl/1.0' };
+    if (proxy.username && proxy.password) {
+      headers['Proxy-Authorization'] = 'Basic ' + Buffer.from(`${proxy.username}:${proxy.password}`).toString('base64');
+    }
+
+    const connectReq = http.request({
+      method: 'CONNECT',
+      hostname: proxy.host,
+      port: proxy.port,
+      path: connectTarget,
+      headers,
+    });
+
+    connectReq.on('connect', (res, socket) => {
+      if (res.statusCode !== 200) {
+        socket.destroy();
+        clearTimeout(to);
+        reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
+        return;
+      }
+      const req = `GET ${targetPath} HTTP/1.1\r\nHost: ${targetHost}\r\nConnection: close\r\nUser-Agent: BotBrowserControl/1.0\r\n\r\n`;
+      socket.write(req);
+      let data = '';
+      socket.on('data', d => { data += d.toString(); });
+      socket.on('end', () => {
+        clearTimeout(to);
+        const bodyStart = data.indexOf('\r\n\r\n');
+        const body = bodyStart !== -1 ? data.slice(bodyStart + 4) : data;
+        try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid JSON')); }
+      });
+      socket.on('error', e => { clearTimeout(to); reject(e); });
+    });
+
+    connectReq.on('error', e => { clearTimeout(to); reject(e); });
+    connectReq.setTimeout(12000, () => { connectReq.destroy(); clearTimeout(to); reject(new Error('Connect timeout')); });
+    connectReq.end();
+  });
+}
+
+// ─── IPC: Update Checker ──────────────────────────────────────────────────────
+
+const BOTBROWSER_RELEASES_API = 'https://api.github.com/repos/botswin/BotBrowser/releases/latest';
+const CONTROL_RELEASES_API    = 'https://api.github.com/repos/tombaki/BotBrowser/releases/latest';
+const CONTROL_VERSION         = '1.2.0';
+
+ipcMain.handle('app:checkForUpdates', async () => {
+  const results = { kernel: null, control: null };
+
+  try {
+    const kernelRes = await httpsGet(BOTBROWSER_RELEASES_API);
+    if (kernelRes.statusCode === 200) {
+      const release = JSON.parse(kernelRes.body);
+      results.kernel = {
+        tagName: release.tag_name,
+        name: release.name || release.tag_name,
+        publishedAt: release.published_at,
+        url: release.html_url,
+      };
+    }
+  } catch {}
+
+  try {
+    const controlRes = await httpsGet(CONTROL_RELEASES_API);
+    if (controlRes.statusCode === 200) {
+      const release = JSON.parse(controlRes.body);
+      const tag = release.tag_name || '';
+      const remoteVer = tag.replace(/^control-v/, '');
+      results.control = {
+        tagName: tag,
+        version: remoteVer,
+        name: release.name || tag,
+        publishedAt: release.published_at,
+        url: release.html_url,
+        isNewer: remoteVer !== CONTROL_VERSION && remoteVer > CONTROL_VERSION,
+      };
+    }
+  } catch {}
+
+  // Persist last seen so we can detect "new since last check"
+  const lastKernel  = store.get('lastSeenKernelRelease');
+  const lastControl = store.get('lastSeenControlRelease');
+
+  const newKernel  = results.kernel  && results.kernel.tagName  !== lastKernel;
+  const newControl = results.control && results.control.tagName !== lastControl && results.control.isNewer;
+
+  if (results.kernel?.tagName)  store.set('lastSeenKernelRelease',  results.kernel.tagName);
+  if (results.control?.tagName) store.set('lastSeenControlRelease', results.control.tagName);
+
+  results.newKernel  = newKernel;
+  results.newControl = newControl;
+
+  return results;
+});
+
+// ─── IPC: Kernel Manager ──────────────────────────────────────────────────────
 
 const KERNEL_GITHUB_API = 'https://api.github.com/repos/botswin/BotBrowser/releases';
 
@@ -574,7 +734,7 @@ function httpsGet(url, redirectCount = 0) {
         'Accept': 'application/vnd.github+json',
       }
     }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         const location = res.headers.location;
         res.resume();
         if (!location) { reject(new Error('Redirect without location')); return; }
@@ -590,9 +750,6 @@ function httpsGet(url, redirectCount = 0) {
   });
 }
 
-/**
- * Fetch list of releases from GitHub and return simplified release info.
- */
 ipcMain.handle('kernel:fetchReleases', async () => {
   const res = await httpsGet(KERNEL_GITHUB_API);
   if (res.statusCode !== 200) throw new Error(`GitHub API error: ${res.statusCode}`);
@@ -614,9 +771,6 @@ ipcMain.handle('kernel:fetchReleases', async () => {
   }));
 });
 
-/**
- * Get the kernels directory (where downloaded kernels are stored).
- */
 function getKernelsDir() {
   return path.join(app.getPath('userData'), 'kernels');
 }
@@ -649,10 +803,11 @@ ipcMain.handle('kernel:delete', (_, version) => {
 });
 
 /**
- * Download a kernel asset.
- * Sends progress events: kernel:downloadProgress { progress, total, downloaded }
- * On complete: kernel:downloadComplete { version, execPath }
- * On error: kernel:downloadError { error }
+ * Download a kernel asset, then auto-install it.
+ * - macOS .dmg: mount with hdiutil, copy .app to /Applications (xattr -rd + codesign -f)
+ * - Linux .deb: install with dpkg -i (requires sudo) or just mark as ready
+ * - Linux .AppImage: chmod +x
+ * - Windows .7z/.zip: extract with built-in tools
  */
 ipcMain.handle('kernel:download', async (_, { downloadUrl, fileName, version }) => {
   const kernelsDir = getKernelsDir();
@@ -661,27 +816,21 @@ ipcMain.handle('kernel:download', async (_, { downloadUrl, fileName, version }) 
 
   const destPath = path.join(versionDir, fileName);
 
-  return new Promise((resolve, reject) => {
+  // Download first
+  await new Promise((resolve, reject) => {
     function doDownload(url, redirectCount) {
       if (redirectCount > 5) { reject(new Error('Too many redirects')); return; }
-
       const parsedUrl = new URL(url);
       const protocol = parsedUrl.protocol === 'https:' ? https : http;
-
-      const req = protocol.get(url, {
-        headers: { 'User-Agent': 'BotBrowserControl/1.0' }
-      }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
+      const req = protocol.get(url, { headers: { 'User-Agent': 'BotBrowserControl/1.0' } }, (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
           const location = res.headers.location;
           res.resume();
           if (!location) { reject(new Error('Redirect without location')); return; }
           doDownload(location, redirectCount + 1);
           return;
         }
-        if (res.statusCode !== 200) {
-          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-          return;
-        }
+        if (res.statusCode !== 200) { reject(new Error(`Download failed: HTTP ${res.statusCode}`)); return; }
 
         const total = parseInt(res.headers['content-length'] || '0', 10);
         let downloaded = 0;
@@ -696,42 +845,134 @@ ipcMain.handle('kernel:download', async (_, { downloadUrl, fileName, version }) 
         });
 
         res.pipe(fileStream);
-        fileStream.on('finish', () => {
-          fileStream.close(() => {
-            // Determine platform-specific exec path and write metadata
-            const platform = process.platform;
-            let execPath = null;
-
-            if (platform === 'darwin' && fileName.endsWith('.dmg')) {
-              execPath = null; // macOS DMG needs manual install
-            } else if (platform === 'linux' && (fileName.endsWith('.deb') || fileName.endsWith('.AppImage'))) {
-              execPath = destPath;
-            } else if (platform === 'win32' && (fileName.endsWith('.7z') || fileName.endsWith('.exe') || fileName.endsWith('.zip'))) {
-              execPath = destPath;
-            }
-
-            const meta = {
-              version, installedAt: new Date().toISOString(),
-              platform, fileName, execPath, downloadUrl
-            };
-            fs.writeFileSync(path.join(versionDir, '.meta.json'), JSON.stringify(meta, null, 2), 'utf8');
-
-            mainWindow?.webContents.send('kernel:downloadComplete', { version, execPath, destPath });
-            resolve({ version, execPath, destPath });
-          });
-        });
-        fileStream.on('error', (e) => { reject(e); });
+        fileStream.on('finish', () => { fileStream.close(resolve); });
+        fileStream.on('error', reject);
       });
-
-      req.on('error', (e) => { reject(e); });
-      req.setTimeout(120000, () => { req.destroy(); reject(new Error('Download timeout')); });
+      req.on('error', reject);
+      req.setTimeout(180000, () => { req.destroy(); reject(new Error('Download timeout')); });
     }
-
     doDownload(downloadUrl, 0);
   });
+
+  // Auto-install
+  let execPath = null;
+  let installStatus = 'downloaded';
+  let installNote = '';
+
+  try {
+    if (IS_MAC && fileName.endsWith('.dmg')) {
+      // Mount DMG, copy .app to /Applications, unmount
+      const mountResult = await runCmd('hdiutil', ['attach', '-nobrowse', '-noverify', '-noautoopen', destPath]);
+      // Find mount point from output (last line with /Volumes/)
+      const mountPoint = (mountResult.stdout || '').split('\n')
+        .map(l => l.trim())
+        .filter(l => l.includes('/Volumes/'))
+        .pop()?.split(/\s+/).pop();
+
+      if (mountPoint && fs.existsSync(mountPoint)) {
+        // Find .app bundle in mount
+        const apps = fs.readdirSync(mountPoint).filter(f => f.endsWith('.app'));
+        if (apps.length > 0) {
+          const appName = apps[0];
+          const srcApp = path.join(mountPoint, appName);
+          const dstApp = path.join('/Applications', appName);
+
+          // Remove old if exists
+          if (fs.existsSync(dstApp)) {
+            await runCmd('rm', ['-rf', dstApp]);
+          }
+
+          // Copy .app to /Applications
+          await runCmd('cp', ['-R', srcApp, '/Applications/']);
+
+          // Remove quarantine flag (xattr) so unsigned app can open
+          try { await runCmd('xattr', ['-rd', 'com.apple.quarantine', dstApp]); } catch {}
+          // Ad-hoc codesign to allow launch
+          try { await runCmd('codesign', ['--force', '--deep', '--sign', '-', dstApp]); } catch {}
+
+          // Find the actual executable inside .app
+          const infoPlistPath = path.join(dstApp, 'Contents', 'Info.plist');
+          let execName = 'Chromium';
+          if (fs.existsSync(infoPlistPath)) {
+            const plistContent = fs.readFileSync(infoPlistPath, 'utf8');
+            const match = plistContent.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/);
+            if (match) execName = match[1];
+          }
+          execPath = path.join(dstApp, 'Contents', 'MacOS', execName);
+          installStatus = 'installed';
+          installNote = `Installed to /Applications/${appName}`;
+        }
+        // Unmount
+        try { await runCmd('hdiutil', ['detach', mountPoint, '-quiet']); } catch {}
+      }
+    } else if (IS_LINUX && fileName.endsWith('.AppImage')) {
+      fs.chmodSync(destPath, 0o755);
+      execPath = destPath;
+      installStatus = 'ready';
+      installNote = 'AppImage is ready to use';
+    } else if (IS_LINUX && fileName.endsWith('.deb')) {
+      // Try to install with pkexec/sudo dpkg
+      try {
+        await runCmd('pkexec', ['dpkg', '-i', destPath]);
+        installStatus = 'installed';
+        installNote = 'Installed via dpkg';
+        execPath = '/usr/bin/botbrowser';
+      } catch {
+        installStatus = 'downloaded';
+        installNote = `Run: sudo dpkg -i ${destPath}`;
+        execPath = null;
+      }
+    } else if (IS_WIN && (fileName.endsWith('.zip') || fileName.endsWith('.7z'))) {
+      // Extract to versionDir
+      if (fileName.endsWith('.zip')) {
+        await runCmd('powershell', ['-Command', `Expand-Archive -Force -Path "${destPath}" -DestinationPath "${versionDir}"`]);
+      }
+      // Find .exe
+      const exes = findFilesRecursive(versionDir, '.exe').filter(f => !f.includes('Uninstall'));
+      execPath = exes[0] || null;
+      installStatus = 'extracted';
+      installNote = 'Extracted successfully';
+    } else if (IS_WIN && fileName.endsWith('.exe')) {
+      execPath = destPath;
+      installStatus = 'ready';
+      installNote = 'Installer ready — run to install';
+    }
+  } catch (installErr) {
+    installNote = `Install step failed: ${installErr.message}`;
+  }
+
+  const meta = {
+    version, installedAt: new Date().toISOString(),
+    platform: process.platform, fileName, execPath, downloadUrl,
+    installStatus, installNote,
+  };
+  fs.writeFileSync(path.join(versionDir, '.meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+
+  mainWindow?.webContents.send('kernel:downloadComplete', { version, execPath, destPath, installStatus, installNote });
+  return { version, execPath, destPath, installStatus, installNote };
 });
 
-// ─── Config File Helpers ───────────────────────────────────────────────────────
+function runCmd(cmd, args) {
+  return new Promise((resolve, reject) => {
+    const proc = execFile(cmd, args, { timeout: 120000 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(stderr || err.message));
+      else resolve({ stdout, stderr });
+    });
+  });
+}
+
+function findFilesRecursive(dir, ext) {
+  const results = [];
+  if (!fs.existsSync(dir)) return results;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) results.push(...findFilesRecursive(full, ext));
+    else if (entry.name.toLowerCase().endsWith(ext)) results.push(full);
+  }
+  return results;
+}
+
+// ─── Config File Helpers ──────────────────────────────────────────────────────
 
 function writeStandaloneConfigFile(profile, profileId) {
   const configs = buildConfigsBlock(profile);
@@ -764,19 +1005,13 @@ function cleanupTempFile(profileId) {
   tempFiles.delete(profileId);
 }
 
-/**
- * Build the "configs" JSON block from profile UI fields.
- * Maps to BotBrowser profile configs structure (PROFILE_CONFIGS.md).
- */
 function buildConfigsBlock(profile) {
   const configs = {};
 
-  // ── Identity & Locale ──
   if (profile.locale) configs.locale = profile.locale;
   if (profile.languages) configs.languages = profile.languages;
   if (profile.timezone) configs.timezone = profile.timezone;
 
-  // location: 'auto', 'real', or "lat,lon" → { latitude, longitude }
   if (profile.location) {
     if (typeof profile.location === 'string' && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(profile.location.trim())) {
       const [lat, lon] = profile.location.split(',').map(Number);
@@ -791,7 +1026,6 @@ function buildConfigsBlock(profile) {
   if (profile.brandFullVersion) configs.brandFullVersion = profile.brandFullVersion;
   if (profile.uaFullVersion) configs.uaFullVersion = profile.uaFullVersion;
 
-  // ── Custom UA (ENT Tier3) ──
   if (profile.platform) configs.platform = profile.platform;
   if (profile.platformVersion) configs.platformVersion = profile.platformVersion;
   if (profile.model) configs.model = profile.model;
@@ -799,24 +1033,20 @@ function buildConfigsBlock(profile) {
   if (profile.bitness) configs.bitness = profile.bitness;
   if (profile.mobile !== undefined && profile.mobile !== '') configs.mobile = !!profile.mobile;
 
-  // ── Proxy ──
   if (profile.proxyServer) {
     configs.proxy = { server: profile.proxyServer };
     if (profile.proxyIp) configs.proxy.ip = profile.proxyIp;
   }
 
-  // ── Custom Headers (PRO) ──
   if (profile.customHeaders && typeof profile.customHeaders === 'object' && Object.keys(profile.customHeaders).length > 0) {
     configs.customHeaders = profile.customHeaders;
   }
 
-  // ── Window & Screen ──
   if (profile.windowSize) configs.window = profile.windowSize;
   if (profile.screenSize) configs.screen = profile.screenSize;
   if (profile.orientation) configs.orientation = profile.orientation;
   if (profile.disableDeviceScaleFactorOnGUI) configs.disableDeviceScaleFactorOnGUI = true;
 
-  // ── Rendering & Media ──
   if (profile.webgl) configs.webgl = profile.webgl;
   if (profile.webgpu) configs.webgpu = profile.webgpu;
   if (profile.webrtc) configs.webrtc = profile.webrtc;
@@ -827,14 +1057,12 @@ function buildConfigsBlock(profile) {
   if (profile.fonts) configs.fonts = profile.fonts;
   if (profile.keyboard) configs.keyboard = profile.keyboard;
 
-  // ── Noise toggles ──
   if (profile.noiseCanvas !== undefined && profile.noiseCanvas !== '') configs.noiseCanvas = !!profile.noiseCanvas;
   if (profile.noiseWebglImage !== undefined && profile.noiseWebglImage !== '') configs.noiseWebglImage = !!profile.noiseWebglImage;
   if (profile.noiseAudioContext !== undefined && profile.noiseAudioContext !== '') configs.noiseAudioContext = !!profile.noiseAudioContext;
   if (profile.noiseClientRects !== undefined && profile.noiseClientRects !== '') configs.noiseClientRects = !!profile.noiseClientRects;
   if (profile.noiseTextRects !== undefined && profile.noiseTextRects !== '') configs.noiseTextRects = !!profile.noiseTextRects;
 
-  // ── Behavior toggles ──
   if (profile.alwaysActive !== undefined) configs.alwaysActive = !!profile.alwaysActive;
   if (profile.disableDebugger !== undefined) configs.disableDebugger = !!profile.disableDebugger;
   if (profile.disableConsoleMessage !== undefined) configs.disableConsoleMessage = !!profile.disableConsoleMessage;
@@ -843,7 +1071,6 @@ function buildConfigsBlock(profile) {
   if (profile.networkInfoOverride !== undefined) configs.networkInfoOverride = !!profile.networkInfoOverride;
   if (profile.enableVariationsInContext !== undefined) configs.enableVariationsInContext = !!profile.enableVariationsInContext;
 
-  // ── Inject random history (PRO) ──
   if (profile.injectRandomHistory !== undefined && profile.injectRandomHistory !== '') {
     const v = profile.injectRandomHistory;
     if (v === true || v === 'true') configs.injectRandomHistory = true;
@@ -851,7 +1078,6 @@ function buildConfigsBlock(profile) {
     else if (!isNaN(Number(v))) configs.injectRandomHistory = Number(v);
   }
 
-  // ── Timing & Seeds (ENT Tier2) ──
   if (profile.fps !== undefined && profile.fps !== '' && profile.fps !== 'profile') configs.fps = isNaN(Number(profile.fps)) ? profile.fps : Number(profile.fps);
   if (profile.timeScale !== undefined && profile.timeScale !== '') { const ts = parseFloat(profile.timeScale); if (!isNaN(ts)) configs.timeScale = ts; }
   if (profile.noiseSeed !== undefined && profile.noiseSeed !== '') { const ns = parseInt(profile.noiseSeed); if (!isNaN(ns)) configs.noiseSeed = ns; }
@@ -865,46 +1091,35 @@ function buildConfigsBlock(profile) {
   return configs;
 }
 
-/**
- * Build CLI args array from profile settings.
- * Priority: CLI flags > profile configs > profile defaults.
- */
 function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   const args = [];
 
-  // ── Core profile ──
   if (botProfileArg) args.push(`--bot-profile=${botProfileArg}`);
   if (profile.profileDirPath && fs.existsSync(profile.profileDirPath)) {
     args.push(`--bot-profile-dir=${profile.profileDirPath}`);
   }
 
-  // ── Session ──
   args.push(`--user-data-dir=${userDataDir}`);
   args.push('--restore-last-session');
   args.push(`--no-first-run`);
 
-  // ── Bot title (window label) ──
   if (profile.name) args.push(`--bot-title=${profile.name}`);
 
-  // ── Proxy ──
   if (profile.proxyServer && profile.proxyServer.trim()) args.push(`--proxy-server=${profile.proxyServer.trim()}`);
   if (profile.proxyIp && profile.proxyIp.trim()) args.push(`--proxy-ip=${profile.proxyIp.trim()}`);
   if (profile.proxyBypassRgx && profile.proxyBypassRgx.trim()) args.push(`--proxy-bypass-rgx=${profile.proxyBypassRgx.trim()}`);
 
-  // ── Identity overrides ──
   if (profile.browserBrand && profile.browserBrand !== '') args.push(`--bot-config-browser-brand=${profile.browserBrand}`);
   if (profile.brandFullVersion && profile.brandFullVersion !== '') args.push(`--bot-config-brand-full-version=${profile.brandFullVersion}`);
   if (profile.uaFullVersion && profile.uaFullVersion !== '') args.push(`--bot-config-ua-full-version=${profile.uaFullVersion}`);
   if (profile.userAgent && profile.userAgent.trim()) args.push(`--user-agent=${profile.userAgent.trim()}`);
 
-  // ── Locale / Geo ──
   if (profile.locale && profile.locale !== '') args.push(`--bot-config-locale=${profile.locale}`);
   if (profile.timezone && profile.timezone !== '') args.push(`--bot-config-timezone=${profile.timezone}`);
   if (profile.languages && profile.languages !== '') args.push(`--bot-config-languages=${profile.languages}`);
   if (profile.location && profile.location !== '') args.push(`--bot-config-location=${profile.location}`);
   if (profile.colorScheme) args.push(`--bot-config-color-scheme=${profile.colorScheme}`);
 
-  // ── Custom UA (ENT Tier3) ──
   if (profile.platform && profile.platform !== '') args.push(`--bot-config-platform=${profile.platform}`);
   if (profile.platformVersion) args.push(`--bot-config-platform-version=${profile.platformVersion}`);
   if (profile.model) args.push(`--bot-config-model=${profile.model}`);
@@ -912,7 +1127,6 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   if (profile.bitness) args.push(`--bot-config-bitness=${profile.bitness}`);
   if (profile.mobile !== undefined && profile.mobile !== '') args.push(`--bot-config-mobile=${!!profile.mobile}`);
 
-  // ── Display & Input ──
   if (profile.windowSize) args.push(`--bot-config-window=${profile.windowSize}`);
   if (profile.screenSize) args.push(`--bot-config-screen=${profile.screenSize}`);
   if (profile.orientation) args.push(`--bot-config-orientation=${profile.orientation}`);
@@ -920,7 +1134,6 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   if (profile.fonts) args.push(`--bot-config-fonts=${profile.fonts}`);
   if (profile.disableDeviceScaleFactorOnGUI) args.push('--bot-config-disable-device-scale-factor');
 
-  // ── Rendering & Media ──
   if (profile.webgl) args.push(`--bot-config-webgl=${profile.webgl}`);
   if (profile.webgpu) args.push(`--bot-config-webgpu=${profile.webgpu}`);
   if (profile.webrtc) args.push(`--bot-config-webrtc=${profile.webrtc}`);
@@ -928,14 +1141,12 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   if (profile.mediaDevices) args.push(`--bot-config-media-devices=${profile.mediaDevices}`);
   if (profile.mediaTypes) args.push(`--bot-config-media-types=${profile.mediaTypes}`);
 
-  // ── Noise overrides ──
   if (profile.noiseCanvas !== undefined && profile.noiseCanvas !== '') args.push(`--bot-config-noise-canvas=${!!profile.noiseCanvas}`);
   if (profile.noiseWebglImage !== undefined && profile.noiseWebglImage !== '') args.push(`--bot-config-noise-webgl-image=${!!profile.noiseWebglImage}`);
   if (profile.noiseAudioContext !== undefined && profile.noiseAudioContext !== '') args.push(`--bot-config-noise-audio-context=${!!profile.noiseAudioContext}`);
   if (profile.noiseClientRects !== undefined && profile.noiseClientRects !== '') args.push(`--bot-config-noise-client-rects=${!!profile.noiseClientRects}`);
   if (profile.noiseTextRects !== undefined && profile.noiseTextRects !== '') args.push(`--bot-config-noise-text-rects=${!!profile.noiseTextRects}`);
 
-  // ── Behavior & Protection toggles ──
   if (profile.disableDebugger === true || profile.disableDebugger === 'true') args.push('--bot-disable-debugger');
   if (!(profile.disableConsoleMessage === false || profile.disableConsoleMessage === 'false')) args.push('--bot-disable-console-message');
   args.push('--bot-always-active');
@@ -945,19 +1156,16 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   if (profile.enableVariationsInContext === true || profile.enableVariationsInContext === 'true') args.push('--bot-enable-variations-in-context');
   if (profile.networkInfoOverride === true || profile.networkInfoOverride === 'true') args.push('--bot-network-info-override');
 
-  // ── Inject random history (PRO) ──
   if (profile.injectRandomHistory !== undefined && profile.injectRandomHistory !== '') {
     const v = profile.injectRandomHistory;
     if (v === true || v === 'true') args.push('--bot-inject-random-history=true');
     else if (v !== false && v !== 'false' && !isNaN(Number(v))) args.push(`--bot-inject-random-history=${Number(v)}`);
   }
 
-  // ── WebRTC ICE (ENT Tier1) ──
   if (profile.webrtcICE && profile.webrtcICE !== 'profile' && profile.webrtcICE !== '') {
     args.push(`--bot-webrtc-ice=${profile.webrtcICE}`);
   }
 
-  // ── Timing & Seeds (ENT Tier2) ──
   if (profile.noiseSeed !== undefined && profile.noiseSeed !== '') { const ns = parseInt(profile.noiseSeed); if (!isNaN(ns) && ns >= 0) args.push(`--bot-noise-seed=${ns}`); }
   if (profile.timeSeed !== undefined && profile.timeSeed !== '') { const ts = parseInt(profile.timeSeed); if (!isNaN(ts) && ts >= 0) args.push(`--bot-time-seed=${ts}`); }
   if (profile.stackSeed !== undefined && profile.stackSeed !== '') {
@@ -968,32 +1176,24 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
   if (profile.timeScale !== undefined && profile.timeScale !== '') { const ts = parseFloat(profile.timeScale); if (!isNaN(ts) && ts > 0 && ts < 1) args.push(`--bot-time-scale=${ts}`); }
   if (profile.fps !== undefined && profile.fps !== '' && profile.fps !== 'profile') args.push(`--bot-fps=${profile.fps}`);
 
-  // ── GPU emulation (ENT Tier2) ──
   if (profile.gpuEmulation === false || profile.gpuEmulation === 'false') args.push('--bot-gpu-emulation=false');
 
-  // ── Custom Headers (PRO) ──
   if (profile.customHeaders && typeof profile.customHeaders === 'object' && Object.keys(profile.customHeaders).length > 0) {
     args.push('--bot-custom-headers=' + JSON.stringify(profile.customHeaders));
   }
 
-  // ── IP Service ──
   if (profile.ipService) args.push(`--bot-ip-service=${profile.ipService}`);
 
-  // ── Mirror mode (ENT Tier3) ──
   if (profile.mirrorController) args.push(`--bot-mirror-controller-endpoint=${profile.mirrorController}`);
   if (profile.mirrorClient) args.push(`--bot-mirror-client-endpoint=${profile.mirrorClient}`);
 
-  // ── Canvas/Audio recording ──
   if (profile.canvasRecordFile) args.push(`--bot-canvas-record-file=${profile.canvasRecordFile}`);
   if (profile.audioRecordFile) args.push(`--bot-audio-record-file=${profile.audioRecordFile}`);
 
-  // ── Bot script ──
   if (profile.botScript) args.push(`--bot-script=${profile.botScript}`);
 
-  // ── Remote debugging port ──
   if (profile.remoteDebuggingPort) args.push(`--remote-debugging-port=${profile.remoteDebuggingPort}`);
 
-  // ── Cookies ──
   if (profile.cookies && profile.cookies.trim()) {
     const cookieVal = profile.cookies.trim();
     if (cookieVal.startsWith('@')) {
@@ -1003,18 +1203,16 @@ function buildLaunchArgs(profile, userDataDir, botProfileArg) {
     }
   }
 
-  // ── Bookmarks ──
   if (profile.bookmarks && profile.bookmarks.trim()) {
     try { JSON.parse(profile.bookmarks.trim()); args.push('--bot-bookmarks=' + profile.bookmarks.trim()); } catch {; }
   }
 
-  // ── Start URL — must be LAST ──
   if (profile.startUrl && profile.startUrl.trim()) args.push(profile.startUrl.trim());
 
   return args;
 }
 
-// ─── CDP Cookie Save ───────────────────────────────────────────────────────────
+// ─── CDP Cookie Save ──────────────────────────────────────────────────────────
 
 async function saveCookiesViaCDP(profileId, port, userDataDir) {
   const cookies = await fetchCookiesViaCDP(port);
@@ -1038,7 +1236,6 @@ async function saveCookiesViaCDP(profileId, port, userDataDir) {
 
 function fetchCookiesViaCDP(port) {
   return new Promise((resolve, reject) => {
-    const net = require('net');
     const crypto = require('crypto');
     const timeout = setTimeout(() => reject(new Error('CDP timeout')), 5000);
 
@@ -1120,7 +1317,7 @@ function fetchCookiesViaCDP(port) {
   });
 }
 
-// ─── Profile Status ────────────────────────────────────────────────────────────
+// ─── Profile Status ───────────────────────────────────────────────────────────
 
 function updateProfileStatus(profileId, status) {
   const profiles = store.get('profiles', []);
@@ -1132,14 +1329,11 @@ function updateProfileStatus(profileId, status) {
   }
 }
 
-// ─── App Lifecycle ─────────────────────────────────────────────────────────────
+// ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
 
-  // ── Reset stale "running" status from a previous force-close ──
-  // runningInstances is in-memory only; on relaunch it's empty.
-  // Any profile still marked "running" in the store is a ghost — reset it.
   const profiles = store.get('profiles', []);
   const hadStale = profiles.some(p => p.status === 'running');
   if (hadStale) {

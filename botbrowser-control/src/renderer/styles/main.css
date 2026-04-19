@@ -1066,7 +1066,12 @@ html, body {
 .custom-header-sep { color: var(--text-3); font-weight: 700; flex-shrink: 0; }
 
 /* ── Settings ──────────────────────────────────────────────────── */
-.settings-form { padding: 24px; max-width: 720px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.settings-scroll-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.settings-form { padding: 24px; max-width: 720px; display: flex; flex-direction: column; gap: 16px; }
 
 /* ── Settings Cards ─────────────────────────────────────────────────────────── */
 .settings-card {
@@ -1412,3 +1417,286 @@ html, body {
   font-size: 10.5px; color: var(--text-3);
   flex-shrink: 0; white-space: nowrap;
 }
+
+/* ── Profile card: allow rows to expand vertically when inline editor open ── */
+.profile-card {
+  height: auto;
+  min-height: 48px;
+  align-items: flex-start;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.profile-card > .profile-cell,
+.profile-card > .profile-identity,
+.profile-card > .profile-cell.profile-actions {
+  min-height: 48px;
+  align-items: center;
+}
+/* Proxy cell stretches to content */
+.profile-cell.proxy-cell {
+  padding: 6px 8px;
+  align-items: flex-start;
+  min-height: 48px;
+  overflow: visible;
+}
+
+/* ── Proxy Cell Content ─────────────────────────────────────────────────────── */
+.proxy-cell-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.proxy-cell-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.proxy-scheme-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #fff;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.proxy-host-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-edit-hint {
+  flex-shrink: 0;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity 0.13s;
+  display: flex;
+  align-items: center;
+}
+.proxy-edit-hint svg { width: 11px; height: 11px; }
+.proxy-cell-row:hover .proxy-edit-hint { opacity: 1; }
+
+/* No-proxy button */
+.proxy-none-btn {
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border-s);
+  transition: color 0.12s, border-color 0.12s;
+  display: inline-block;
+}
+.proxy-none-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* IP result row */
+.proxy-ip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.proxy-ip-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+.proxy-ip-result.dc { color: var(--danger); }
+
+.proxy-country-code {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.proxy-ip-checking {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.proxy-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  padding: 1px 7px;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.proxy-check-btn:hover { background: rgba(52,152,219,0.2); }
+.proxy-check-btn.loading { opacity: 0.5; pointer-events: none; }
+.proxy-check-btn svg { width: 10px; height: 10px; }
+
+.proxy-recheck-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.12s;
+  flex-shrink: 0;
+}
+.proxy-recheck-btn:hover { color: var(--accent); }
+.proxy-recheck-btn.loading { animation: spin 0.8s linear infinite; pointer-events: none; }
+
+/* ── Inline Proxy Editor (PIE) ──────────────────────────────────────────────── */
+.proxy-inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  width: 100%;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  animation: pieIn 0.12s ease;
+}
+@keyframes pieIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+
+.pie-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pie-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  width: 22px;
+  flex-shrink: 0;
+}
+
+.pie-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-s);
+  border-radius: 6px;
+  color: var(--text-1);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  outline: none;
+  transition: border-color 0.13s, box-shadow 0.13s;
+}
+.pie-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+  background: var(--bg-input-f);
+}
+.pie-input::placeholder { color: var(--text-3); }
+
+.pie-autofill {
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--success);
+  background: var(--success-dim);
+  border: 1px solid var(--success-b);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.pie-autofill:hover { background: rgba(39,174,96,0.2); }
+
+.pie-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  justify-content: flex-end;
+}
+
+/* ── Update Banner ──────────────────────────────────────────────────────────── */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  background: linear-gradient(90deg, rgba(52,152,219,0.12), rgba(52,152,219,0.06));
+  border-bottom: 1px solid var(--accent-border);
+  font-size: 12px;
+  color: var(--text-1);
+  flex-shrink: 0;
+  animation: slideDown 0.2s ease;
+}
+
+.update-banner-icon {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.update-banner-icon svg { width: 14px; height: 14px; }
+
+.update-banner-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+/* ── Update pill in settings / kernel manager ───────────────────────────────── */
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: rgba(52,152,219,0.12);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  white-space: nowrap;
+}
+.update-pill svg { width: 10px; height: 10px; }
+
+/* ── Light mode overrides for new elements ──────────────────────────────────── */
+body.light .proxy-inline-editor { background: var(--bg-elevated); }
+body.light .pie-input { background: var(--bg-input); color: var(--text-1); }
+body.light .update-banner { background: linear-gradient(90deg, rgba(41,128,185,0.08), rgba(41,128,185,0.03)); }
