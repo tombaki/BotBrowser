@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   // Kernel Manager
   kernel: {
     fetchReleases: () => ipcRenderer.invoke('kernel:fetchReleases'),
+    getCachedReleases: () => ipcRenderer.invoke('kernel:getCachedReleases'),
     getDir: () => ipcRenderer.invoke('kernel:getDir'),
     listInstalled: () => ipcRenderer.invoke('kernel:listInstalled'),
     delete: (version) => ipcRenderer.invoke('kernel:delete', version),
@@ -60,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Platform info
   platform: process.platform,
+  arch: process.arch,
 
   // Event listeners
   on: (channel, callback) => {

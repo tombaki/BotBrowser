@@ -1,6 +1,6 @@
 {
   "name": "botbrowser-control",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "BotBrowser Control Center - Professional Browser Profile Manager",
   "main": "src/main/main.js",
   "scripts": {

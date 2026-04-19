@@ -102,6 +102,8 @@
     settings = await window.api.settings.get();
     await loadProfiles();
     await refreshRunningSessions();
+    // Load cached kernel releases so Kernel Manager shows immediately on open
+    await loadCachedKernelReleases();
     render();
     bindNav();
     bindEvents();
@@ -510,21 +512,26 @@
       ? proxyStr.replace(/^[a-z+\-]+:\/\/[^@]+@/i, '').replace(/^[a-z+\-]+:\/\//i, '')
       : '';
 
-    // IP result display
-    let ipDisplay = '';
-    if (isLoading) {
-      ipDisplay = `<span class="proxy-ip-checking">⟳ Checking…</span>`;
-    } else if (ipResult && ipResult.status !== 'fail') {
-      const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '🌐';
-      const country = ipResult.countryCode || '';
-      const isHosting = ipResult.hosting || ipResult.proxy;
-      ipDisplay = `<span class="proxy-ip-result${isHosting ? ' dc' : ''}" title="${esc(ipResult.query + ' · ' + (ipResult.city||'') + ', ' + (ipResult.country||''))}">
-        ${flag} ${esc(ipResult.query || '')} <span class="proxy-country-code">${esc(country)}</span>${isHosting ? ' ⚠' : ''}
-      </span>`;
+    // Status dot: green=ok, red=fail/error, yellow=loading, grey=unchecked
+    let statusDot = '';
+    let flagDisplay = '';
+    if (proxyStr) {
+      if (isLoading) {
+        statusDot = `<span class="proxy-status-dot checking" title="Checking…"></span>`;
+      } else if (ipCheckResults[profile.id] === null) {
+        statusDot = `<span class="proxy-status-dot error" title="Check failed"></span>`;
+      } else if (ipResult && ipResult.status !== 'fail') {
+        const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '';
+        const country = ipResult.countryCode || '';
+        const isHosting = ipResult.hosting || ipResult.proxy;
+        statusDot = `<span class="proxy-status-dot ok${isHosting ? ' dc' : ''}" title="${esc(ipResult.query + ' · ' + (ipResult.city||'') + ', ' + (ipResult.country||''))}"></span>`;
+        flagDisplay = `<span class="proxy-flag-country" title="${esc(ipResult.query)}">${flag} <span class="proxy-country-code">${esc(country)}</span>${isHosting ? ' ⚠' : ''}</span>`;
+      } else {
+        statusDot = `<span class="proxy-status-dot unchecked" title="Not checked"></span>`;
+      }
     }
 
     if (!proxyStr) {
-      // No proxy — show clickable "Set proxy" hint
       return `<span class="proxy-none-btn" data-action="open-proxy-editor" data-id="${profile.id}" title="Set proxy">
         ${I.proxy} <span style="color:var(--text-3);font-size:11px">Set proxy…</span>
       </span>`;
@@ -532,15 +539,14 @@
 
     return `<div class="proxy-cell-content">
       <div class="proxy-cell-row" data-action="open-proxy-editor" data-id="${profile.id}" title="Click to edit proxy" style="cursor:pointer">
+        ${statusDot}
         ${schemeBadge}
         <span class="proxy-host-text">${esc(proxyHost)}</span>
         <span class="proxy-edit-hint">${I.edit}</span>
       </div>
-      ${ipDisplay ? `<div class="proxy-ip-row">${ipDisplay}
+      ${flagDisplay ? `<div class="proxy-ip-row">${flagDisplay}
         <button class="proxy-recheck-btn${isLoading?' loading':''}" data-action="check-ip" data-id="${profile.id}" title="Re-check IP">↺</button>
-      </div>` : `
-        <button class="proxy-check-btn${isLoading?' loading':''}" data-action="check-ip" data-id="${profile.id}" title="Check exit IP">${isLoading ? '⟳' : I.globe} Check IP</button>
-      `}
+      </div>` : isLoading ? `<div class="proxy-ip-row"><span class="proxy-ip-checking">⟳ Checking…</span></div>` : ''}
     </div>`;
   }
 
@@ -564,18 +570,31 @@
     const ipResult = ipCheckResults[profileId];
     const autoFill = (ipResult && ipResult.query) ? ipResult.query : '';
 
+    // Status indicator inside editor
+    let editorStatus = '';
+    if (ipCheckLoading[profileId]) {
+      editorStatus = `<span class="pie-status checking">⟳ Checking…</span>`;
+    } else if (ipResult && ipResult.status !== 'fail') {
+      const flag = ipResult.countryCode ? countryCodeToEmoji(ipResult.countryCode) : '';
+      const country = ipResult.countryCode || '';
+      const isHosting = ipResult.hosting || ipResult.proxy;
+      editorStatus = `<span class="pie-status ok">${flag} ${esc(ipResult.query||'')} ${esc(country)}${isHosting?' ⚠':''}</span>`;
+    } else if (ipCheckResults[profileId] === null) {
+      editorStatus = `<span class="pie-status error">✗ Check failed</span>`;
+    }
+
     cell.innerHTML = `<div class="proxy-inline-editor">
       <div class="pie-row">
         <span class="pie-label">Proxy</span>
         <input class="pie-input" id="pie-proxy-${profileId}" value="${esc(current)}" placeholder="socks5://host:port" autocomplete="off" spellcheck="false">
       </div>
+      ${editorStatus ? `<div class="pie-row">${editorStatus}</div>` : ''}
       <div class="pie-row">
         <span class="pie-label">IP</span>
-        <input class="pie-input" id="pie-ip-${profileId}" value="${esc(currentIp)}" placeholder="exit IP override" autocomplete="off">
+        <input class="pie-input" id="pie-ip-${profileId}" value="${esc(currentIp)}" placeholder="exit IP override (optional)" autocomplete="off">
         ${autoFill ? `<button class="pie-autofill" onclick="document.getElementById('pie-ip-${profileId}').value='${autoFill}'" title="Use detected IP: ${autoFill}">↑ ${autoFill}</button>` : ''}
       </div>
       <div class="pie-actions">
-        <button class="btn btn-secondary btn-sm" data-action="check-ip" data-id="${profileId}">${I.globe} Check IP</button>
         <button class="btn btn-ghost btn-sm" data-action="cancel-inline-proxy">Cancel</button>
         <button class="btn btn-primary btn-sm" data-action="save-inline-proxy" data-id="${profileId}">${I.check} Save</button>
       </div>
@@ -583,7 +602,56 @@
 
     // Focus proxy input
     const inp = document.getElementById(`pie-proxy-${profileId}`);
-    if (inp) { inp.focus(); inp.select(); }
+    if (inp) {
+      inp.focus(); inp.select();
+      // Debounced auto-check when proxy value changes
+      let debounceTimer = null;
+      inp.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          const val = normalizeProxy(inp.value.trim());
+          if (val && val !== profile.proxyServer) {
+            // Temporarily check with the new value without saving
+            checkProxyValueQuick(profileId, val);
+          }
+        }, 900);
+      });
+      // Also check on Enter key
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveInlineProxy(profileId);
+        if (e.key === 'Escape') closeInlineProxyEditor();
+      });
+    }
+  }
+
+  // Quick IP check with a specific proxy value (without saving profile)
+  async function checkProxyValueQuick(profileId, proxyValue) {
+    if (ipCheckLoading[profileId]) return;
+    ipCheckLoading[profileId] = true;
+    // Update status in editor
+    const cell = document.getElementById(`proxy-cell-${profileId}`);
+    if (cell && inlineProxyEditId === profileId) {
+      const statusEl = cell.querySelector('.pie-status');
+      if (statusEl) { statusEl.className = 'pie-status checking'; statusEl.textContent = '⟳ Checking…'; }
+      else {
+        // re-mount to show checking state
+        const profile = profiles.find(p => p.id === profileId);
+        if (profile) mountInlineProxyEditor(profileId, cell);
+      }
+    }
+    try {
+      const result = await window.api.proxy.checkIp(proxyValue);
+      ipCheckResults[profileId] = result;
+    } catch (e) {
+      ipCheckResults[profileId] = null;
+    } finally {
+      ipCheckLoading[profileId] = false;
+      const cell2 = document.getElementById(`proxy-cell-${profileId}`);
+      if (cell2 && inlineProxyEditId === profileId) {
+        const profile = profiles.find(p => p.id === profileId);
+        if (profile) mountInlineProxyEditor(profileId, cell2);
+      }
+    }
   }
 
   function closeInlineProxyEditor() {
@@ -1690,10 +1758,25 @@
         ${kernelReleases.map(release => {
           const isInstalled = installedVersions.has(release.tagName);
           const dl = kernelDownloads[release.tagName];
+          // Pick the single best asset for this platform to avoid double-downloads
           const platformAssets = release.assets.filter(a =>
             platformAssetExt.some(ext => a.name.toLowerCase().includes(ext.toLowerCase()))
           );
-          const displayAssets = (platformAssets.length > 0 ? platformAssets : release.assets).slice(0, 5);
+          // Prefer arch-specific asset matching current platform arch
+          const arch = window.api.arch || '';
+          const archKeywords = arch === 'arm64' ? ['arm64', 'aarch64'] : ['x64', 'amd64', 'x86_64'];
+          let bestAssets = platformAssets.filter(a => archKeywords.some(k => a.name.toLowerCase().includes(k)));
+          if (bestAssets.length === 0) bestAssets = platformAssets;
+          // On macOS prefer .dmg over .zip; on Windows prefer .exe installer over .zip
+          if (window.api.platform === 'darwin') {
+            const dmg = bestAssets.filter(a => a.name.toLowerCase().endsWith('.dmg'));
+            if (dmg.length > 0) bestAssets = dmg;
+          } else if (window.api.platform === 'win32') {
+            const exe = bestAssets.filter(a => a.name.toLowerCase().endsWith('.exe'));
+            if (exe.length > 0) bestAssets = exe;
+          }
+          // Fallback: show up to 3 assets if nothing matched
+          const displayAssets = (bestAssets.length > 0 ? bestAssets.slice(0, 1) : (platformAssets.length > 0 ? platformAssets.slice(0, 2) : release.assets.slice(0, 3)));
 
           return `
           <div class="kernel-release-row${isInstalled ? ' kernel-installed-row-highlight' : ''}">
@@ -1746,7 +1829,7 @@
     const btn = document.getElementById('kernel-refresh-btn');
     if (btn) { btn.disabled = true; btn.textContent = '⟳ Fetching…'; }
     try {
-      // Always refresh available releases; preserve installed list unless we have new data
+      // Always refresh available releases from GitHub + installed from disk
       const [releases, installed] = await Promise.all([
         window.api.kernel.fetchReleases(),
         window.api.kernel.listInstalled(),
@@ -1761,8 +1844,23 @@
       showToast(`Failed to fetch releases: ${e.message}`, 'error', 5000);
       if (!kernelReleases) kernelReleases = [];
     } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh'; }
       if (currentView === 'settings') renderSettings();
     }
+  }
+
+  // Load cached releases from store on startup (so kernel manager shows immediately)
+  async function loadCachedKernelReleases() {
+    try {
+      const [cached, installed] = await Promise.all([
+        window.api.kernel.getCachedReleases(),
+        window.api.kernel.listInstalled(),
+      ]);
+      if (cached && cached.length > 0) kernelReleases = cached;
+      const installedMap = {};
+      installed.forEach(k => { installedMap[k.version] = k; });
+      kernelInstalled = Object.values(installedMap);
+    } catch {}
   }
 
   async function downloadKernel(version, url, filename) {

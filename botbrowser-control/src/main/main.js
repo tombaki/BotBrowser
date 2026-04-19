@@ -44,6 +44,7 @@ const store = new Store({
     windowBounds: { width: 1280, height: 800 },
     lastSeenKernelRelease: null,
     lastSeenControlRelease: null,
+    cachedKernelReleases: null,
   }
 });
 
@@ -458,15 +459,20 @@ ipcMain.handle('shell:showItemInFolder', (_, p) => shell.showItemInFolder(p));
 function parseProxy(proxyStr) {
   if (!proxyStr || !proxyStr.trim()) return null;
   let s = proxyStr.trim();
-  if (!/^[a-z]+:\/\//i.test(s)) s = 'socks5://' + s;
+  // Strip accidental double-scheme e.g. "socks5://socks5://host:port"
+  s = s.replace(/^(socks5?[ah]?|https?):\/\/(socks5?[ah]?|https?):\/\//i, '$1://');
+  if (!/^[a-z][a-z0-9+\-.]*:\/\//i.test(s)) s = 'socks5://' + s;
   try {
     const u = new URL(s);
+    const proto = u.protocol.replace(':', '').toLowerCase();
+    const host = u.hostname;
+    if (!host) return null;
     return {
-      protocol: u.protocol.replace(':', ''),
-      host: u.hostname,
-      port: parseInt(u.port) || (u.protocol.startsWith('http') ? 8080 : 1080),
-      username: decodeURIComponent(u.username || ''),
-      password: decodeURIComponent(u.password || ''),
+      protocol: proto,
+      host,
+      port: parseInt(u.port) || (proto.startsWith('http') ? 8080 : 1080),
+      username: u.username ? decodeURIComponent(u.username) : '',
+      password: u.password ? decodeURIComponent(u.password) : '',
     };
   } catch { return null; }
 }
@@ -670,7 +676,7 @@ function doHttpProxyIpCheck(proxy, targetHost, targetPath, targetPort) {
 
 const BOTBROWSER_RELEASES_API = 'https://api.github.com/repos/botswin/BotBrowser/releases/latest';
 const CONTROL_RELEASES_API    = 'https://api.github.com/repos/tombaki/BotBrowser/releases/latest';
-const CONTROL_VERSION         = '1.2.0';
+const CONTROL_VERSION         = '1.2.1';
 
 ipcMain.handle('app:checkForUpdates', async () => {
   const results = { kernel: null, control: null };
@@ -754,7 +760,7 @@ ipcMain.handle('kernel:fetchReleases', async () => {
   const res = await httpsGet(KERNEL_GITHUB_API);
   if (res.statusCode !== 200) throw new Error(`GitHub API error: ${res.statusCode}`);
   const releases = JSON.parse(res.body);
-  return releases.slice(0, 20).map(r => ({
+  const mapped = releases.slice(0, 20).map(r => ({
     id: r.id,
     tagName: r.tag_name,
     name: r.name || r.tag_name,
@@ -769,6 +775,14 @@ ipcMain.handle('kernel:fetchReleases', async () => {
       contentType: a.content_type,
     }))
   }));
+  // Cache releases to store so they persist across restarts
+  store.set('cachedKernelReleases', mapped);
+  return mapped;
+});
+
+// Return cached releases (fast, no network)
+ipcMain.handle('kernel:getCachedReleases', () => {
+  return store.get('cachedKernelReleases', null);
 });
 
 function getKernelsDir() {
